@@ -7,18 +7,19 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 
 public class Main {
 
-  private static final int TRIES = 31;
+  private static final int TRIES = 73;
   private static final int CHANCE = 10_000;
   private static final int MARGIN = 8;
   private static final int PRICE_HISTORY = 3 * 24 * 60;
   private static final int WINDOW = 60;
-  private static final int GROUPS = 2;
+  private static final int GROUPS = 4;
   private static final int NETS_PER_GROUP = 4;
   private static final int NETS = GROUPS * NETS_PER_GROUP;
   private static final Prices prices = new Prices();
   private static final Random rand = new SecureRandom();
   private static final AtomicReferenceArray<NeuralNet> nets = new AtomicReferenceArray<>(NETS);
   private static final AtomicReferenceArray<NeuralNet> prevNets = new AtomicReferenceArray<>(NETS);
+  private static final short[][] buffer = new short[NETS + 1][2 * (PRICE_HISTORY + WINDOW * 2)];
 
   static {
     for (int n = 0; n < NETS; n++) {
@@ -41,10 +42,10 @@ public class Main {
     }
     new Thread(() -> {
       while (true) {
-        int randTime = randTime();
+        prices.getData(buffer[buffer.length - 1], false);
         for (int n = 0; n < NETS; n++) {
           NeuralNet net = getNet(n);
-          long profit = profit(net, randTime);
+          long profit = profit(net, buffer.length - 1);
           Log.info("=> N%d: %d", n, (int) Math.rint(profit / 100d));
         }
         Log.info("");
@@ -64,8 +65,8 @@ public class Main {
       NeuralNet prev = null;
       boolean saveToDisk = false;
       for (long i = 0; i < Long.MAX_VALUE; i++) {
-        saveToDisk = saveToDisk || i % 1_000 == 0;
-        net = eval(net, index);
+        saveToDisk = saveToDisk || i % 10_000 == 0;
+        net = eval(net, index, true);
         if (net != prev) {
           save(net, index, saveToDisk);
           prev = net;
@@ -101,11 +102,7 @@ public class Main {
     return nets.get(rand.nextInt(NETS_PER_GROUP) + (NETS_PER_GROUP * randGroup));
   }
 
-  private static int randTime() {
-    return rand.nextInt(prices.size() - PRICE_HISTORY - WINDOW * 2) + PRICE_HISTORY;
-  }
-
-  private static NeuralNet eval(NeuralNet orig, int index) {
+  private static NeuralNet eval(NeuralNet orig, int index, boolean training) {
     NeuralNet[] nets = new NeuralNet[3];
     nets[0] = (nets[0] = prev(index)) == orig ? null : nets[0];
     nets[1] = orig;
@@ -116,10 +113,10 @@ public class Main {
                     : orig.mutate(MARGIN, CHANCE)))) == orig ? null : nets[2];
     int[][] profits = new int[nets.length][TRIES];
     for (int i = 0; i < TRIES; i++) {
-      int randTime = randTime();
+      prices.getData(buffer[index], training);
       for (int n = 0; n < nets.length; n++) {
         if (nets[n] != null) {
-          profits[n][i] = profit(nets[n], randTime);
+          profits[n][i] = profit(nets[n], index);
         }
       }
     }
@@ -132,7 +129,7 @@ public class Main {
     int bestIndex = -1;
     for (int n = 0; n < profits.length; n++) {
       if (nets[n] != null) {
-        int cur = profits[n][nets.length / 2];
+        int cur = profits[n][TRIES / 2];
         if (cur >= best) {
           best = cur;
           bestIndex = n;
@@ -142,25 +139,22 @@ public class Main {
     return nets[bestIndex];
   }
 
-  private static int profit(NeuralNet net, int start) {
+  private static int profit(NeuralNet net, int index) {
     int buyIndex = -1;
-    short[] data = new short[PRICE_HISTORY * 2];
     int defaultPrice = -1;
-    for (int t = 0; t < WINDOW; t++) {
-      prices.getData(data, start + t);
+    for (int t = WINDOW * 2 - 1; t > WINDOW - 1; t--) {
       if (defaultPrice < 0) {
-        defaultPrice = data[0];
+        defaultPrice = buffer[index][t * 2];
       }
-      if (Decision.BUY == net.decide(data)) {
+      if (Decision.BUY == net.decide(buffer[index], t * 2)) {
         buyIndex = t;
         break;
       }
     }
     if (buyIndex > -1) {
-      for (int t = 0; t < WINDOW; t++) {
-        prices.getData(data, start + buyIndex + 1 + t);
-        if (Decision.SELL == net.decide(data)) {
-          return data[0] - data[buyIndex + 1 + t];
+      for (int t = buyIndex - 1; t > buyIndex - 1 - WINDOW; t--) {
+        if (Decision.SELL == net.decide(buffer[index], t * 2)) {
+          return buffer[index][0] - buffer[index][t * 2];
         }
       }
     }

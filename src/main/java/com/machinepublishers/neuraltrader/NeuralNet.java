@@ -210,8 +210,8 @@ public class NeuralNet {
             mutationsPerMillion));
   }
 
-  public Decision decide(short[] input) {
-    boolean[] result = processDecision(input);
+  public Decision decide(short[] input, int offset) {
+    boolean[] result = processDecision(input, offset);
     if (result[0] && !result[1]) {
       return Decision.BUY;
     }
@@ -221,8 +221,7 @@ public class NeuralNet {
     return Decision.HOLD;
   }
 
-  private boolean[] processDecision(short[] input) {
-    assert input.length == weights[0][0].length;
+  private boolean[] processDecision(short[] input, int offset) {
     boolean[] prev = new boolean[weights[0].length];
     boolean[] cur = new boolean[weights[0].length];
     for (int i = 0; i < weights.length; i++) {
@@ -234,7 +233,7 @@ public class NeuralNet {
               sum += weights[i][j][k];
             }
           } else {
-            sum += (int) weights[i][j][k] * (int) input[k];
+            sum += (int) weights[i][j][k] * (int) input[k + offset];
           }
         }
         cur[j] = sum > thresholds[i][j];
