@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
@@ -15,31 +16,41 @@ import java.util.stream.Stream;
 
 public class Prices {
 
-  private record Data(int[] prices, long[] volumes) {
-
-  }
-
   private static final Random rand = new SecureRandom();
 
-  private final int[][] pricesTraining;
-  private final long[][] volumesTraining;
-  private final int[][] pricesTesting;
-  private final long[][] volumesTesting;
+  private final int[][] training;
+  private final int[][] testing;
+  private final int[] oddsTraining;
+  private final int[] oddsTesting;
 
   public Prices() {
-    List<Data> data = Stream.of(new File("./prices/training").listFiles())
+    List<int[]> data = Stream.of(new File("./prices/training").listFiles())
         .filter(f -> !f.getName().startsWith(".")).map(Prices::load).collect(Collectors.toList());
-    pricesTraining = data.stream().map(d -> d.prices()).toArray(int[][]::new);
-    volumesTraining = data.stream().map(d -> d.volumes()).toArray(long[][]::new);
+    training = data.toArray(new int[0][]);
     data = Stream.of(new File("./prices/testing").listFiles())
         .filter(f -> !f.getName().startsWith(".")).map(Prices::load).collect(Collectors.toList());
-    pricesTesting = data.stream().map(d -> d.prices()).toArray(int[][]::new);
-    volumesTesting = data.stream().map(d -> d.volumes()).toArray(long[][]::new);
+    testing = data.toArray(new int[0][]);
+
+    oddsTraining = initOdds(training);
+    oddsTesting = initOdds(testing);
   }
 
-  private static Data load(File file) {
+  private static int[] initOdds(int[][] data) {
+    int[] odds = new int[1000];
+    double k = 1000d / (double) Stream.of(data).map(a -> a.length).reduce(0, Integer::sum);
+    int pos = 0;
+    for (int i = 0; i < data.length; i++) {
+      int chances = (int) Math.rint((double) data[i].length * k);
+      for (int j = 0; j < chances && pos < odds.length; j++, pos++) {
+        odds[pos] = i;
+      }
+    }
+    return Arrays.copyOf(odds, pos);
+  }
+
+  private static int[] load(File file) {
     List<Integer> prices = new ArrayList<>();
-    List<Long> volumes = new ArrayList<>();
+    List<Integer> volumes = new ArrayList<>();
     try (BufferedReader reader = new BufferedReader(
         new InputStreamReader(new FileInputStream(file)))) {
       String[] cols = reader.readLine().split(",");
@@ -51,10 +62,22 @@ public class Prices {
         String[] tokens = line.split(",");
         double priceTmp = Double.parseDouble(tokens[priceCol]);
         double volumeTmp = Double.parseDouble(tokens[volumeCol]);
-        prices.add(Double.isFinite(priceTmp) ? (int) Math.rint(priceTmp * 100d) : -1);
-        volumes.add(Double.isFinite(volumeTmp) ? (long) Math.rint(volumeTmp * 100d) : 0L);
+        priceTmp = Double.isFinite(priceTmp) ? Math.rint(priceTmp * 100d) : -1;
+        volumeTmp = Double.isFinite(volumeTmp) ? Math.rint(volumeTmp) : 0L;
+        if (priceTmp > Integer.MAX_VALUE || priceTmp < Integer.MIN_VALUE) {
+          throw new IllegalStateException(
+              String.format("Price overflow '%s' (%f) in %s", tokens[priceCol], priceTmp,
+                  file.getAbsolutePath()));
+        }
+        if (volumeTmp > Integer.MAX_VALUE || volumeTmp < Integer.MIN_VALUE) {
+          throw new IllegalStateException(
+              String.format("Volume overflow '%s' (%f) in %s", tokens[volumeCol], volumeTmp,
+                  file.getAbsolutePath()));
+        }
+        prices.add((int) priceTmp);
+        volumes.add((int) volumeTmp);
       }
-      if (!ascending) {
+      if (ascending) {
         Collections.reverse(prices);
         Collections.reverse(volumes);
       }
@@ -67,38 +90,20 @@ public class Prices {
           prevPrice = price;
         }
       }
-      return new Data(prices.stream().mapToInt(i -> i).toArray(),
-          volumes.stream().mapToLong(i -> i).toArray());
+      int[] data = new int[prices.size() * 2];
+      for (int i = 0, d = 0; i < prices.size(); i++) {
+        data[d++] = prices.get(i);
+        data[d++] = volumes.get(i);
+      }
+      return data;
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
   }
 
-  public void getData(short[] buffer, boolean training) {
-    int[][] prices = training ? pricesTraining : pricesTesting;
-    long[][] volumes = training ? volumesTraining : volumesTesting;
-    int length = buffer.length / 2;
-    int dataset = rand.nextInt(prices.length);
-    int offset = length + rand.nextInt(prices[dataset].length - length);
-    double maxPrice = 0;
-    double maxVolume = 0;
-    double minPrice = Integer.MAX_VALUE;
-    double minVolume = Double.MAX_VALUE;
-    for (int i = offset; i > offset - length; i--) {
-      maxPrice = Math.max(prices[dataset][i], maxPrice);
-      maxVolume = Math.max(volumes[dataset][i], maxVolume);
-      minPrice = Math.min(prices[dataset][i], minPrice);
-      minVolume = Math.min(volumes[dataset][i], minVolume);
-    }
-    maxPrice *= (1d + rand.nextDouble(.5));
-    maxVolume *= (1d + rand.nextDouble(.5));
-    minPrice *= (.5d + rand.nextDouble(.5));
-    minVolume *= (.5d + rand.nextDouble(.5));
-    for (int i = offset, d = 0; i > offset - length; i--) {
-      buffer[d++] = (short) Math.rint(
-          (prices[dataset][i] - minPrice) / (maxPrice - minPrice) * (double) Short.MAX_VALUE);
-      buffer[d++] = (short) Math.rint(
-          (volumes[dataset][i] - minVolume) / (maxVolume - minVolume) * (double) Short.MAX_VALUE);
-    }
+  public int[] getData(boolean training) {
+    int[][] data = training ? this.training : this.testing;
+    int[] odds = training ? this.oddsTraining : this.oddsTesting;
+    return data[odds[rand.nextInt(odds.length)]];
   }
 }

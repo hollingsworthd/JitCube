@@ -21,10 +21,10 @@ public class NeuralNet {
 
   private final File file;
   private final File prev;
-  private final byte[][][] weights;
-  private final byte[][] thresholds;
+  private final float[][][] weights;
+  private final float[][] thresholds;
 
-  private NeuralNet(File saveTo, byte[][][] weights, byte[][] thresholds) {
+  private NeuralNet(File saveTo, float[][][] weights, float[][] thresholds) {
     this.file = saveTo;
     this.prev = initPrev(saveTo);
     this.weights = weights;
@@ -56,21 +56,21 @@ public class NeuralNet {
     int len = Integer.parseInt(dimensions[1]);
     int inputLen = Integer.parseInt(dimensions[2]);
 
-    byte[][][] weights = initWeights(layers, len, inputLen);
-    byte[][] thresholds = initThresholds(layers, len);
+    float[][][] weights = initWeights(layers, len, inputLen);
+    float[][] thresholds = initThresholds(layers, len);
     String[] weightTokens = lines[1].split(",");
     String[] thresholdTokens = lines[2].split(",");
 
     for (int i = 0, token = 0; i < weights.length; i++) {
       for (int j = 0; j < weights[i].length; j++) {
         for (int k = 0; k < weights[i][j].length; k++) {
-          weights[i][j][k] = Byte.parseByte(weightTokens[token++]);
+          weights[i][j][k] = Float.parseFloat(weightTokens[token++]);
         }
       }
     }
     for (int i = 0, token = 0; i < thresholds.length; i++) {
       for (int j = 0; j < thresholds[i].length; j++) {
-        thresholds[i][j] = Byte.parseByte(thresholdTokens[token++]);
+        thresholds[i][j] = Float.parseFloat(thresholdTokens[token++]);
       }
     }
     this.weights = weights;
@@ -85,40 +85,36 @@ public class NeuralNet {
     return new NeuralNet(file, layers, len, inputLen);
   }
 
-  public NeuralNet clone(int newId) {
-    return new NeuralNet(new File(DATA, "n" + newId), weights, thresholds);
-  }
-
   private static File initPrev(File file) {
     return new File(DATA, "." + file.getName() + ".prev");
   }
 
-  private static byte[][][] initWeights(int layers, int len, int inputLen) {
-    byte[][][] weights = new byte[layers][][];
-    weights[layers - 1] = new byte[2][len];
+  private static float[][][] initWeights(int layers, int len, int inputLen) {
+    float[][][] weights = new float[layers][][];
+    weights[layers - 1] = new float[2][len];
 
     for (int i = 0; i < layers - 1; i++) {
-      weights[i] = new byte[len][];
+      weights[i] = new float[len][];
       for (int j = 0; j < len; j++) {
-        weights[i][j] = new byte[i == 0 && j == 0 ? inputLen : len];
+        weights[i][j] = new float[i == 0 && j == 0 ? inputLen : len];
       }
     }
     return weights;
   }
 
-  private static byte[][] initThresholds(int layers, int len) {
-    byte[][] thresholds = new byte[layers][];
-    thresholds[layers - 1] = new byte[2];
+  private static float[][] initThresholds(int layers, int len) {
+    float[][] thresholds = new float[layers][];
+    thresholds[layers - 1] = new float[2];
     for (int i = 0; i < layers - 1; i++) {
-      thresholds[i] = new byte[len];
+      thresholds[i] = new float[len];
     }
     return thresholds;
   }
 
-  private static byte[][][] copy(byte[][][] array) {
-    byte[][][] copy = new byte[array.length][][];
+  private static float[][][] copy(float[][][] array) {
+    float[][][] copy = new float[array.length][][];
     for (int i = 0; i < array.length; i++) {
-      copy[i] = new byte[array[i].length][];
+      copy[i] = new float[array[i].length][];
       for (int j = 0; j < array[i].length; j++) {
         copy[i][j] = Arrays.copyOf(array[i][j], array[i][j].length);
       }
@@ -126,15 +122,15 @@ public class NeuralNet {
     return copy;
   }
 
-  private static byte[][] copy(byte[][] array) {
-    byte[][] copy = new byte[array.length][];
+  private static float[][] copy(float[][] array) {
+    float[][] copy = new float[array.length][];
     for (int i = 0; i < array.length; i++) {
       copy[i] = Arrays.copyOf(array[i], array[i].length);
     }
     return copy;
   }
 
-  private static byte[][][] merge(int mergesPercent, byte[][][] array1, byte[][][] array2) {
+  private static float[][][] merge(int mergesPercent, float[][][] array1, float[][][] array2) {
     for (int i = 0; i < array1.length; i++) {
       for (int j = 0; j < array1[i].length; j++) {
         for (int k = 0; k < array1[i][j].length; k++) {
@@ -147,7 +143,7 @@ public class NeuralNet {
     return array1;
   }
 
-  private static byte[][] merge(int mergesPercent, byte[][] array1, byte[][] array2) {
+  private static float[][] merge(int mergesPercent, float[][] array1, float[][] array2) {
     for (int i = 0; i < array1.length; i++) {
       for (int j = 0; j < array1[i].length; j++) {
         if (rand.nextInt(100) < mergesPercent) {
@@ -158,17 +154,17 @@ public class NeuralNet {
     return array1;
   }
 
-  private static byte[][][] mutate(byte[][][] weights, int margin, int mutationsPerMillion) {
+  private static float[][][] mutate(float[][][] weights, float margin, int mutationsPerMillion) {
     assert validateMutation(margin, mutationsPerMillion);
     for (int i = 0; i < weights.length; i++) {
       for (int j = 0; j < weights[i].length; j++) {
         for (int k = 0; k < weights[i][j].length; k++) {
           if (rand.nextInt(1_000_000) < mutationsPerMillion) {
-            int sign = rand.nextBoolean() ? 1 : -1;
-            int newVal = sign * rand.nextInt(margin + 1) + (int) weights[i][j][k];
-            newVal = newVal > Byte.MAX_VALUE ? Byte.MAX_VALUE : newVal;
-            newVal = newVal < Byte.MIN_VALUE ? Byte.MIN_VALUE : newVal;
-            weights[i][j][k] = (byte) newVal;
+            float sign = rand.nextBoolean() ? 1 : -1;
+            float newVal = sign * rand.nextFloat(0, margin) + weights[i][j][k];
+            newVal = newVal > 1 ? 1 : newVal;
+            newVal = newVal < -1 ? -1 : newVal;
+            weights[i][j][k] = newVal;
           }
         }
       }
@@ -176,33 +172,50 @@ public class NeuralNet {
     return weights;
   }
 
-  private static byte[][] mutate(byte[][] thresholds, int margin, int mutationsPerMillion) {
+  private static float[][] mutate(float[][] thresholds, float margin, int mutationsPerMillion) {
     assert validateMutation(margin, mutationsPerMillion);
     for (int i = 0; i < thresholds.length; i++) {
       for (int j = 0; j < thresholds[i].length; j++) {
         if (rand.nextInt(1_000_000) < mutationsPerMillion) {
-          int sign = rand.nextBoolean() ? 1 : -1;
-          int newVal = sign * rand.nextInt(margin + 1) + (int) thresholds[i][j];
-          newVal = newVal > Byte.MAX_VALUE ? Byte.MAX_VALUE : newVal;
-          newVal = newVal < Byte.MIN_VALUE ? Byte.MIN_VALUE : newVal;
-          thresholds[i][j] = (byte) newVal;
+          float sign = rand.nextBoolean() ? 1 : -1;
+          float newVal = sign * rand.nextFloat(0, margin) + thresholds[i][j];
+          newVal = newVal > 1 ? 1 : newVal;
+          newVal = newVal < -1 ? -1 : newVal;
+          thresholds[i][j] = newVal;
         }
       }
     }
     return thresholds;
   }
 
-  private static boolean validateMutation(int margin, int mutationsPerMillion) {
-    return margin <= Byte.MAX_VALUE && margin >= 0 && mutationsPerMillion <= 1_000_000
+  private static boolean validateMutation(float margin, int mutationsPerMillion) {
+    return margin <= 1 && margin >= 0 && mutationsPerMillion <= 1_000_000
         && mutationsPerMillion >= 0;
   }
 
-  public NeuralNet mutate(int margin, int mutationsPerMillion) {
+  private static void write(NeuralNet net, File file) {
+    try {
+      Path tmp = new File(file.getParentFile(),
+          (file.getName().startsWith(".") ? "" : ".") + file.getName() + ".tmp").toPath();
+      Files.writeString(tmp, net.toString(), StandardOpenOption.CREATE, StandardOpenOption.WRITE,
+          StandardOpenOption.TRUNCATE_EXISTING);
+      Files.move(tmp, file.toPath(), StandardCopyOption.REPLACE_EXISTING,
+          StandardCopyOption.ATOMIC_MOVE);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  public NeuralNet clone(int newId) {
+    return new NeuralNet(new File(DATA, "n" + newId), weights, thresholds);
+  }
+
+  public NeuralNet mutate(float margin, int mutationsPerMillion) {
     return new NeuralNet(this.file, mutate(copy(weights), margin, mutationsPerMillion),
         mutate(copy(thresholds), margin, mutationsPerMillion));
   }
 
-  public NeuralNet mergeAndMutate(NeuralNet other, int mergesPercent, int margin,
+  public NeuralNet mergeAndMutate(NeuralNet other, int mergesPercent, float margin,
       int mutationsPerMillion) {
     return new NeuralNet(this.file,
         mutate(merge(mergesPercent, copy(weights), other.weights), margin, mutationsPerMillion),
@@ -210,7 +223,7 @@ public class NeuralNet {
             mutationsPerMillion));
   }
 
-  public Decision decide(short[] input, int offset) {
+  public Decision decide(int[] input, int offset) {
     boolean[] result = processDecision(input, offset);
     if (result[0] && !result[1]) {
       return Decision.BUY;
@@ -221,19 +234,19 @@ public class NeuralNet {
     return Decision.HOLD;
   }
 
-  private boolean[] processDecision(short[] input, int offset) {
+  private boolean[] processDecision(int[] input, int offset) {
     boolean[] prev = new boolean[weights[0].length];
     boolean[] cur = new boolean[weights[0].length];
     for (int i = 0; i < weights.length; i++) {
       for (int j = 0; j < weights[i].length; j++) {
-        long sum = 0;
+        float sum = 0;
         for (int k = 0; k < weights[i][j].length; k++) {
           if (j != 0 || i != 0) {
             if (prev[k]) {
               sum += weights[i][j][k];
             }
           } else {
-            sum += (int) weights[i][j][k] * (int) input[k + offset];
+            sum += weights[i][j][k] * (float) input[k + offset];
           }
         }
         cur[j] = sum > thresholds[i][j];
@@ -290,19 +303,6 @@ public class NeuralNet {
 
   public void savePrev() {
     write(this, prev);
-  }
-
-  private static void write(NeuralNet net, File file) {
-    try {
-      Path tmp = new File(file.getParentFile(),
-          (file.getName().startsWith(".") ? "" : ".") + file.getName() + ".tmp").toPath();
-      Files.writeString(tmp, net.toString(), StandardOpenOption.CREATE, StandardOpenOption.WRITE,
-          StandardOpenOption.TRUNCATE_EXISTING);
-      Files.move(tmp, file.toPath(), StandardCopyOption.REPLACE_EXISTING,
-          StandardCopyOption.ATOMIC_MOVE);
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    }
   }
 
   public NeuralNet getPrev() {
