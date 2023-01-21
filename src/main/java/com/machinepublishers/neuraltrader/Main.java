@@ -227,7 +227,7 @@ public class Main {
           return normalize ? (profit > 0 ? 1 : -1) : data[cur] - data[buyOffset];
         }
       }
-      return normalize ? -3 : data[(offset + buyTime - WINDOW) * 2] - data[buyOffset];
+      return normalize ? -3 : data[(offset + buyTime - WINDOW - 1) * 2] - data[buyOffset];
     }
     return normalize ? -2 : 0;
   }
