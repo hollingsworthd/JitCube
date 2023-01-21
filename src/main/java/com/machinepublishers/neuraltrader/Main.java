@@ -1,6 +1,7 @@
 package com.machinepublishers.neuraltrader;
 
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
@@ -162,43 +163,65 @@ public class Main {
             factor * CHANCE) : (rand.nextInt(1_000) == 0 ? randOther(index, true).clone(index)
             : (!normalize && rand.nextInt(10_000) == 0 ? randOther(index, false).clone(index)
                 : orig.mutate(factor * MARGIN, factor * CHANCE)));
-    int[] profits = new int[nets.length];
+    return normalize ? evalNormalized(nets) : evalScaled(nets);
+  }
+
+  private static NeuralNet evalNormalized(NeuralNet[] nets) {
+    int[] noramlizedProfits = new int[nets.length];
     for (int i = 0; i < TRIES; i++) {
       int[] data = prices.getData(true);
       int offset = randTime(data);
-
-      if (normalize) {
-        for (int n = 0; n < nets.length; n++) {
-          if (nets[n] != null) {
-            profits[n] += profit(nets[n], data, offset, true);
-          }
-        }
-      } else {
-        int maxProfit = Integer.MIN_VALUE;
-        int maxLoss = 0;
-        for (int j = 0; j < WINDOW; j++) {
-          int sell = data[2 * (j + offset)];
-          for (int k = j + 1; k < j + 1 + WINDOW; k++) {
-            int buy = data[2 * (k + offset)];
-            maxProfit = Math.max(maxProfit, sell - buy);
-            maxLoss = Math.min(maxLoss, sell - buy);
-          }
-        }
-        double scale = maxProfit - maxLoss;
-        for (int n = 0; n < nets.length; n++) {
-          if (nets[n] != null) {
-            profits[n] += (int) Math.rint(Math.min(1d,
-                Math.max(0d, (double) (profit(nets[n], data, offset, false) - maxLoss) / scale))
-                * 10_000d);
-          }
+      for (int n = 0; n < nets.length; n++) {
+        if (nets[n] != null) {
+          noramlizedProfits[n] += profit(nets[n], data, offset, true);
         }
       }
     }
     int best = Integer.MIN_VALUE;
     int bestIndex = -1;
-    for (int n = 0; n < profits.length; n++) {
+    for (int n = 0; n < noramlizedProfits.length; n++) {
       if (nets[n] != null) {
-        int cur = profits[n];
+        int cur = noramlizedProfits[n];
+        if (cur >= best) {
+          best = cur;
+          bestIndex = n;
+        }
+      }
+    }
+    return nets[bestIndex];
+  }
+
+  private static NeuralNet evalScaled(NeuralNet[] nets) {
+    double[][] scaledProfits = new double[nets.length][TRIES];
+    for (int i = 0; i < TRIES; i++) {
+      int[] data = prices.getData(true);
+      int offset = randTime(data);
+      int maxProfit = Integer.MIN_VALUE;
+      int maxLoss = 0;
+      for (int j = 0; j < WINDOW; j++) {
+        int sell = data[2 * (j + offset)];
+        for (int k = j + 1; k < j + 1 + WINDOW; k++) {
+          int buy = data[2 * (k + offset)];
+          maxProfit = Math.max(maxProfit, sell - buy);
+          maxLoss = Math.min(maxLoss, sell - buy);
+        }
+      }
+      double scale = maxProfit - maxLoss;
+      for (int n = 0; n < nets.length; n++) {
+        if (nets[n] != null) {
+          scaledProfits[n][i] = Math.min(1d,
+              Math.max(0d, (double) (profit(nets[n], data, offset, false) - maxLoss) / scale));
+        }
+      }
+    }
+    for (int n = 0; n < nets.length; n++) {
+      Arrays.sort(scaledProfits[n]);
+    }
+    double best = -Double.MAX_VALUE;
+    int bestIndex = -1;
+    for (int n = 0; n < nets.length; n++) {
+      if (nets[n] != null) {
+        double cur = scaledProfits[n][TRIES / 2];
         if (cur >= best) {
           best = cur;
           bestIndex = n;
