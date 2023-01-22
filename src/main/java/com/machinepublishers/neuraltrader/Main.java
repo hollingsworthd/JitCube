@@ -7,7 +7,7 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 
 public class Main {
 
-  private static final int TRIES = 53;
+  private static final int TRIES = 51;
   private static final int CHANCE = 10_000;
   private static final float MARGIN = .01f;
   private static final int PRICE_HISTORY = 12 * 60;
@@ -49,9 +49,10 @@ public class Main {
         int offset = randTime(data);
         double maxProfit = Integer.MIN_VALUE;
         double maxLoss = 0;
-        for (int i = 0; i < WINDOW; i++) {
+        for (int i = 0; i < WINDOW * 2 - 1; i++) {
           int sell = data[2 * (i + offset)];
-          for (int j = i + 1; j < i + 1 + WINDOW; j++) {
+          for (int start = Math.max(WINDOW, i + 1), j = start;
+              j < WINDOW * 2 && j - start <= WINDOW; j++) {
             int buy = data[2 * (j + offset)];
             maxProfit = Math.max(maxProfit, sell - buy);
             maxLoss = Math.min(maxLoss, sell - buy);
@@ -85,7 +86,8 @@ public class Main {
           allTimeScale += scaleHistory[i];
         }
         allTimeScale = Math.max(0, allTimeScale);
-        allTimeScale = Math.min(100, Math.max(0, allTimeScale / scaleHistory.length * 100));
+        allTimeScale = Math.min(100,
+            Math.max(0, allTimeScale / Math.min(x + 1, scaleHistory.length) * 100));
         Log.info("========================================");
         Log.info("===== %s %.3f%% ($%.2f)", allTimeProfit > 0 ? "WINNING" : "LOSING", allTimeScale,
             Math.abs(allTimeProfit / 100d));
@@ -198,9 +200,10 @@ public class Main {
       int offset = randTime(data);
       int maxProfit = Integer.MIN_VALUE;
       int maxLoss = 0;
-      for (int j = 0; j < WINDOW; j++) {
+      for (int j = 0; j < WINDOW * 2 - 1; j++) {
         int sell = data[2 * (j + offset)];
-        for (int k = j + 1; k < j + 1 + WINDOW; k++) {
+        for (int start = Math.max(WINDOW, j + 1), k = start; k < WINDOW * 2 && k - start <= WINDOW;
+            k++) {
           int buy = data[2 * (k + offset)];
           maxProfit = Math.max(maxProfit, sell - buy);
           maxLoss = Math.min(maxLoss, sell - buy);

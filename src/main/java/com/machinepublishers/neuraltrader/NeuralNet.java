@@ -235,6 +235,19 @@ public class NeuralNet {
   }
 
   private boolean[] processDecision(int[] input, int offset) {
+    int maxPrice = Integer.MIN_VALUE;
+    int minPrice = Integer.MAX_VALUE;
+    int maxVolume = Integer.MIN_VALUE;
+    int minVolume = Integer.MAX_VALUE;
+
+    for (int i = offset, max = i + weights[0][0].length; i < max; i += 2) {
+      maxPrice = Math.max(maxPrice, input[i]);
+      minPrice = Math.min(minPrice, input[i]);
+      maxVolume = Math.max(maxVolume, input[i + 1]);
+      minVolume = Math.min(minVolume, input[i + 1]);
+    }
+    float scalePrice = 10_000f / (float) (maxPrice - minPrice);
+    float scaleVolume = 10_000f / (float) (maxVolume - minVolume);
     boolean[] prev = new boolean[weights[0].length];
     boolean[] cur = new boolean[weights[0].length];
     for (int i = 0; i < weights.length; i++) {
@@ -245,8 +258,10 @@ public class NeuralNet {
             if (prev[k]) {
               sum += weights[i][j][k];
             }
+          } else if (k % 2 == 0) {
+            sum += weights[i][j][k] * ((float) (input[k + offset] - minPrice) * scalePrice);
           } else {
-            sum += weights[i][j][k] * (float) input[k + offset];
+            sum += weights[i][j][k] * ((float) (input[k + offset] - minVolume) * scaleVolume);
           }
         }
         cur[j] = sum > thresholds[i][j];
