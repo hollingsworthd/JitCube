@@ -1,19 +1,18 @@
 package com.machinepublishers.neuraltrader;
 
 import java.security.SecureRandom;
-import java.util.Arrays;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
 public class Main {
 
-  private static final int TRIES = 51;
-  private static final int CHANCE = 10_000;
-  private static final float MARGIN = .01f;
-  private static final int PRICE_HISTORY = 12 * 60;
-  private static final int WINDOW = 30;
+  private static final int TRIES = 1024;
+  private static final int CHANCE = 100_000;
+  private static final float MARGIN = .04f;
+  private static final int PRICE_HISTORY = 2 * 24 * 60;
+  private static final int WINDOW = 60;
   private static final int GROUPS = 4;
-  private static final int GROUP_SIZE = 4;
+  private static final int GROUP_SIZE = 2;
   private static final int NETS = GROUPS * GROUP_SIZE;
   private static final AtomicReferenceArray<NeuralNet> nets = new AtomicReferenceArray<>(NETS);
   private static final AtomicReferenceArray<NeuralNet> prevNets = new AtomicReferenceArray<>(NETS);
@@ -38,6 +37,21 @@ public class Main {
       }
       Log.info("\nSaved.");
     }));
+    new Thread(() -> {
+      while (true) {
+        for (int n = 0; n < NETS; n++) {
+          NeuralNet net = getNet(n);
+          if (net != null) {
+            net.save();
+          }
+        }
+        try {
+          Thread.sleep(60 * 1000);
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        }
+      }
+    }).start();
     for (int n = 0; n < NETS; n++) {
       initThread(n).start();
     }
@@ -102,22 +116,29 @@ public class Main {
   }
 
   private static Thread initThread(int index) {
-    return new Thread(() -> {
+    Thread thread = new Thread(() -> {
       NeuralNet net = getNet(index);
       net = net.exists() ? net : save(net.mutate(0, 0), index, true);
       NeuralNet prev = null;
-      boolean saveToDisk = false;
-      for (long i = 0; i < Long.MAX_VALUE; i++) {
-        saveToDisk = saveToDisk || i % 10_000 == 0;
-        net = eval(net, index, true);
-        net = eval(net, index, false);
-        if (net != prev) {
-          save(net, index, saveToDisk);
-          prev = net;
-          saveToDisk = false;
+      for (long x = 0; x < Long.MAX_VALUE; x++) {
+        for (int i = 0, max = x % 100 == 0 ? 100 : 1; i < max; i++) {
+          net = eval(net, index, false);
+          if (net != prev) {
+            save(net, index, false);
+            prev = net;
+          }
+        }
+        for (int i = 0, max = x % 23 == 0 ? 100 : 1; i < max; i++) {
+          net = eval(net, index, true);
+          if (net != prev) {
+            save(net, index, false);
+            prev = net;
+          }
         }
       }
     });
+    thread.setName("n" + index);
+    return thread;
   }
 
   private static NeuralNet getNet(int index) {
@@ -155,17 +176,56 @@ public class Main {
     return rand.nextInt((data.length - BUFFER_LEN) / 2);
   }
 
-  private static NeuralNet eval(NeuralNet orig, int index, boolean normalize) {
-    int factor = index + 1;
+  private static NeuralNet eval(NeuralNet orig, int index, boolean compete) {
+    int factor = index / GROUP_SIZE + 1;
     NeuralNet[] nets = new NeuralNet[3];
     nets[0] = (nets[0] = prev(index)) == orig ? null : nets[0];
     nets[1] = orig;
     nets[2] =
         rand.nextInt(2) == 0 ? orig.mergeAndMutate(randOther(index, true), 50, factor * MARGIN,
-            factor * CHANCE) : (rand.nextInt(1_000) == 0 ? randOther(index, true).clone(index)
-            : (!normalize && rand.nextInt(10_000) == 0 ? randOther(index, false).clone(index)
+            factor * CHANCE) : (rand.nextInt(100) == 0 ? randOther(index, true).clone(index)
+            : (compete && rand.nextInt(500) == 0 ? randOther(index, false).clone(index)
                 : orig.mutate(factor * MARGIN, factor * CHANCE)));
-    return normalize ? evalNormalized(nets) : evalScaled(nets);
+    NeuralNet next = compete ? evalScaled(nets, orig) : evalNormalized(nets);
+    if (next.equals(orig)) {
+      return orig;
+    }
+    NeuralNet tmp = orig;
+    NeuralNet mergeNext = null;
+    while (true) {
+      tmp = tmp.mergeAndMutate(next, 50, 0, 0);
+      if (tmp.equals(next)) {
+        break;
+      }
+      if ((compete ? evalScaled(new NeuralNet[]{next, tmp}, next)
+          : evalNormalized(new NeuralNet[]{next, tmp})) == tmp) {
+        mergeNext = tmp;
+        break;
+      }
+    }
+    tmp = next;
+    NeuralNet mergeOrig = null;
+    while (true) {
+      tmp = tmp.mergeAndMutate(orig, 50, 0, 0);
+      if (tmp.equals(orig)) {
+        break;
+      }
+      if ((compete ? evalScaled(new NeuralNet[]{next, tmp}, next)
+          : evalNormalized(new NeuralNet[]{next, tmp})) == tmp) {
+        mergeOrig = tmp;
+      }
+    }
+    if (mergeNext == null && mergeOrig != null) {
+      next = mergeOrig;
+    } else if (mergeNext != null && mergeOrig == null) {
+      next = mergeNext;
+    } else if (mergeNext != null && mergeOrig != null) {
+      next = compete ? evalScaled(new NeuralNet[]{mergeNext, mergeOrig}, mergeOrig)
+          : evalNormalized(new NeuralNet[]{mergeNext, mergeOrig});
+    }
+    NeuralNet confirm = compete ? evalScaled(new NeuralNet[]{orig, next}, null)
+        : evalNormalized(new NeuralNet[]{orig, next});
+    return confirm == next ? next : orig;
   }
 
   private static NeuralNet evalNormalized(NeuralNet[] nets) {
@@ -193,45 +253,46 @@ public class Main {
     return nets[bestIndex];
   }
 
-  private static NeuralNet evalScaled(NeuralNet[] nets) {
-    double[][] scaledProfits = new double[nets.length][TRIES];
+  private static NeuralNet evalScaled(NeuralNet[] nets, NeuralNet defaultBest) {
+    int[] profits = new int[nets.length];
+    int[] firstPlaceFinishes = new int[profits.length];
     for (int i = 0; i < TRIES; i++) {
       int[] data = prices.getData(true);
       int offset = randTime(data);
-      int maxProfit = Integer.MIN_VALUE;
-      int maxLoss = 0;
-      for (int j = 0; j < WINDOW * 2 - 1; j++) {
-        int sell = data[2 * (j + offset)];
-        for (int start = Math.max(WINDOW, j + 1), k = start; k < WINDOW * 2 && k - start <= WINDOW;
-            k++) {
-          int buy = data[2 * (k + offset)];
-          maxProfit = Math.max(maxProfit, sell - buy);
-          maxLoss = Math.min(maxLoss, sell - buy);
-        }
-      }
-      double scale = maxProfit - maxLoss;
+      int best = Integer.MIN_VALUE;
+      int bestIndex = -1;
       for (int n = 0; n < nets.length; n++) {
         if (nets[n] != null) {
-          scaledProfits[n][i] = Math.min(1d,
-              Math.max(0d, (double) (profit(nets[n], data, offset, false) - maxLoss) / scale));
+          int profit = profit(nets[n], data, offset, false);
+          profits[n] += profit;
+          if (profit >= best) {
+            best = profit;
+            bestIndex = n;
+          }
+        }
+      }
+      ++firstPlaceFinishes[bestIndex];
+    }
+    int bestProfit = Integer.MIN_VALUE;
+    int bestProfitIndex = -1;
+    int bestPlace = Integer.MIN_VALUE;
+    int bestPlaceIndex = -1;
+    for (int i = 0; i < profits.length; i++) {
+      if (nets[i] != null) {
+        if (profits[i] >= bestProfit) {
+          bestProfit = profits[i];
+          bestProfitIndex = i;
+        }
+        if (firstPlaceFinishes[i] >= bestPlace) {
+          bestPlace = firstPlaceFinishes[i];
+          bestPlaceIndex = i;
         }
       }
     }
-    for (int n = 0; n < nets.length; n++) {
-      Arrays.sort(scaledProfits[n]);
+    if (bestProfitIndex == bestPlaceIndex) {
+      return nets[bestProfitIndex];
     }
-    double best = -Double.MAX_VALUE;
-    int bestIndex = -1;
-    for (int n = 0; n < nets.length; n++) {
-      if (nets[n] != null) {
-        double cur = scaledProfits[n][TRIES / 2];
-        if (cur >= best) {
-          best = cur;
-          bestIndex = n;
-        }
-      }
-    }
-    return nets[bestIndex];
+    return defaultBest;
   }
 
   private static int profit(NeuralNet net, int[] data, int offset, boolean normalize) {

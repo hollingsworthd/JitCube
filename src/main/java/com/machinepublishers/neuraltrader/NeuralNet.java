@@ -21,10 +21,10 @@ public class NeuralNet {
 
   private final File file;
   private final File prev;
-  private final float[][][] weights;
-  private final float[][] thresholds;
+  private final double[][][] weights;
+  private final double[][] thresholds;
 
-  private NeuralNet(File saveTo, float[][][] weights, float[][] thresholds) {
+  private NeuralNet(File saveTo, double[][][] weights, double[][] thresholds) {
     this.file = saveTo;
     this.prev = initPrev(saveTo);
     this.weights = weights;
@@ -56,21 +56,21 @@ public class NeuralNet {
     int len = Integer.parseInt(dimensions[1]);
     int inputLen = Integer.parseInt(dimensions[2]);
 
-    float[][][] weights = initWeights(layers, len, inputLen);
-    float[][] thresholds = initThresholds(layers, len);
+    double[][][] weights = initWeights(layers, len, inputLen);
+    double[][] thresholds = initThresholds(layers, len);
     String[] weightTokens = lines[1].split(",");
     String[] thresholdTokens = lines[2].split(",");
 
     for (int i = 0, token = 0; i < weights.length; i++) {
       for (int j = 0; j < weights[i].length; j++) {
         for (int k = 0; k < weights[i][j].length; k++) {
-          weights[i][j][k] = Float.parseFloat(weightTokens[token++]);
+          weights[i][j][k] = Double.parseDouble(weightTokens[token++]);
         }
       }
     }
     for (int i = 0, token = 0; i < thresholds.length; i++) {
       for (int j = 0; j < thresholds[i].length; j++) {
-        thresholds[i][j] = Float.parseFloat(thresholdTokens[token++]);
+        thresholds[i][j] = Double.parseDouble(thresholdTokens[token++]);
       }
     }
     this.weights = weights;
@@ -89,32 +89,32 @@ public class NeuralNet {
     return new File(DATA, "." + file.getName() + ".prev");
   }
 
-  private static float[][][] initWeights(int layers, int len, int inputLen) {
-    float[][][] weights = new float[layers][][];
-    weights[layers - 1] = new float[2][len];
+  private static double[][][] initWeights(int layers, int len, int inputLen) {
+    double[][][] weights = new double[layers][][];
+    weights[layers - 1] = new double[2][len];
 
     for (int i = 0; i < layers - 1; i++) {
-      weights[i] = new float[len][];
+      weights[i] = new double[len][];
       for (int j = 0; j < len; j++) {
-        weights[i][j] = new float[i == 0 && j == 0 ? inputLen : len];
+        weights[i][j] = new double[i == 0 && j == 0 ? inputLen : len];
       }
     }
     return weights;
   }
 
-  private static float[][] initThresholds(int layers, int len) {
-    float[][] thresholds = new float[layers][];
-    thresholds[layers - 1] = new float[2];
+  private static double[][] initThresholds(int layers, int len) {
+    double[][] thresholds = new double[layers][];
+    thresholds[layers - 1] = new double[2];
     for (int i = 0; i < layers - 1; i++) {
-      thresholds[i] = new float[len];
+      thresholds[i] = new double[len];
     }
     return thresholds;
   }
 
-  private static float[][][] copy(float[][][] array) {
-    float[][][] copy = new float[array.length][][];
+  private static double[][][] copy(double[][][] array) {
+    double[][][] copy = new double[array.length][][];
     for (int i = 0; i < array.length; i++) {
-      copy[i] = new float[array[i].length][];
+      copy[i] = new double[array[i].length][];
       for (int j = 0; j < array[i].length; j++) {
         copy[i][j] = Arrays.copyOf(array[i][j], array[i][j].length);
       }
@@ -122,15 +122,15 @@ public class NeuralNet {
     return copy;
   }
 
-  private static float[][] copy(float[][] array) {
-    float[][] copy = new float[array.length][];
+  private static double[][] copy(double[][] array) {
+    double[][] copy = new double[array.length][];
     for (int i = 0; i < array.length; i++) {
       copy[i] = Arrays.copyOf(array[i], array[i].length);
     }
     return copy;
   }
 
-  private static float[][][] merge(int mergesPercent, float[][][] array1, float[][][] array2) {
+  private static double[][][] merge(int mergesPercent, double[][][] array1, double[][][] array2) {
     for (int i = 0; i < array1.length; i++) {
       for (int j = 0; j < array1[i].length; j++) {
         for (int k = 0; k < array1[i][j].length; k++) {
@@ -143,7 +143,7 @@ public class NeuralNet {
     return array1;
   }
 
-  private static float[][] merge(int mergesPercent, float[][] array1, float[][] array2) {
+  private static double[][] merge(int mergesPercent, double[][] array1, double[][] array2) {
     for (int i = 0; i < array1.length; i++) {
       for (int j = 0; j < array1[i].length; j++) {
         if (rand.nextInt(100) < mergesPercent) {
@@ -154,17 +154,18 @@ public class NeuralNet {
     return array1;
   }
 
-  private static float[][][] mutate(float[][][] weights, float margin, int mutationsPerMillion) {
-    assert validateMutation(margin, mutationsPerMillion);
-    for (int i = 0; i < weights.length; i++) {
-      for (int j = 0; j < weights[i].length; j++) {
-        for (int k = 0; k < weights[i][j].length; k++) {
-          if (rand.nextInt(1_000_000) < mutationsPerMillion) {
-            float sign = rand.nextBoolean() ? 1 : -1;
-            float newVal = sign * rand.nextFloat(0, margin) + weights[i][j][k];
-            newVal = newVal > 1 ? 1 : newVal;
-            newVal = newVal < -1 ? -1 : newVal;
-            weights[i][j][k] = newVal;
+  private static double[][][] mutate(double[][][] weights, double margin, int mutationsPerMillion) {
+    if (mutationsPerMillion > 0) {
+      for (int i = 0; i < weights.length; i++) {
+        for (int j = 0; j < weights[i].length; j++) {
+          for (int k = 0; k < weights[i][j].length; k++) {
+            if (rand.nextInt(1_000_000) < mutationsPerMillion) {
+              double sign = rand.nextBoolean() ? 1f : -1f;
+              double newVal = sign * rand.nextDouble(0, margin) + weights[i][j][k];
+              newVal = newVal > 1f ? 1f : newVal;
+              newVal = newVal < -1f ? -1f : newVal;
+              weights[i][j][k] = newVal;
+            }
           }
         }
       }
@@ -172,28 +173,24 @@ public class NeuralNet {
     return weights;
   }
 
-  private static float[][] mutate(float[][] thresholds, float margin, int mutationsPerMillion) {
-    assert validateMutation(margin, mutationsPerMillion);
-    for (int i = 0; i < thresholds.length; i++) {
-      for (int j = 0; j < thresholds[i].length; j++) {
-        if (rand.nextInt(1_000_000) < mutationsPerMillion) {
-          float sign = rand.nextBoolean() ? 1 : -1;
-          float newVal = sign * rand.nextFloat(0, margin) + thresholds[i][j];
-          newVal = newVal > 1 ? 1 : newVal;
-          newVal = newVal < -1 ? -1 : newVal;
-          thresholds[i][j] = newVal;
+  private static double[][] mutate(double[][] thresholds, double margin, int mutationsPerMillion) {
+    if (mutationsPerMillion > 0) {
+      for (int i = 0; i < thresholds.length; i++) {
+        for (int j = 0; j < thresholds[i].length; j++) {
+          if (rand.nextInt(1_000_000) < mutationsPerMillion) {
+            double sign = rand.nextBoolean() ? 1f : -1f;
+            double newVal = sign * rand.nextDouble(0, margin) + thresholds[i][j];
+            newVal = newVal > 1f ? 1f : newVal;
+            newVal = newVal < -1f ? -1f : newVal;
+            thresholds[i][j] = newVal;
+          }
         }
       }
     }
     return thresholds;
   }
 
-  private static boolean validateMutation(float margin, int mutationsPerMillion) {
-    return margin <= 1 && margin >= 0 && mutationsPerMillion <= 1_000_000
-        && mutationsPerMillion >= 0;
-  }
-
-  private static void write(NeuralNet net, File file) {
+  private static synchronized void write(NeuralNet net, File file) {
     try {
       Path tmp = new File(file.getParentFile(),
           (file.getName().startsWith(".") ? "" : ".") + file.getName() + ".tmp").toPath();
@@ -210,12 +207,12 @@ public class NeuralNet {
     return new NeuralNet(new File(DATA, "n" + newId), weights, thresholds);
   }
 
-  public NeuralNet mutate(float margin, int mutationsPerMillion) {
+  public NeuralNet mutate(double margin, int mutationsPerMillion) {
     return new NeuralNet(this.file, mutate(copy(weights), margin, mutationsPerMillion),
         mutate(copy(thresholds), margin, mutationsPerMillion));
   }
 
-  public NeuralNet mergeAndMutate(NeuralNet other, int mergesPercent, float margin,
+  public NeuralNet mergeAndMutate(NeuralNet other, int mergesPercent, double margin,
       int mutationsPerMillion) {
     return new NeuralNet(this.file,
         mutate(merge(mergesPercent, copy(weights), other.weights), margin, mutationsPerMillion),
@@ -246,22 +243,22 @@ public class NeuralNet {
       maxVolume = Math.max(maxVolume, input[i + 1]);
       minVolume = Math.min(minVolume, input[i + 1]);
     }
-    float scalePrice = 10_000f / (float) (maxPrice - minPrice);
-    float scaleVolume = 10_000f / (float) (maxVolume - minVolume);
+    double scalePrice = maxPrice - minPrice;
+    double scaleVolume = maxVolume - minVolume;
     boolean[] prev = new boolean[weights[0].length];
     boolean[] cur = new boolean[weights[0].length];
     for (int i = 0; i < weights.length; i++) {
       for (int j = 0; j < weights[i].length; j++) {
-        float sum = 0;
+        double sum = 0f;
         for (int k = 0; k < weights[i][j].length; k++) {
           if (j != 0 || i != 0) {
             if (prev[k]) {
               sum += weights[i][j][k];
             }
           } else if (k % 2 == 0) {
-            sum += weights[i][j][k] * ((float) (input[k + offset] - minPrice) * scalePrice);
+            sum += weights[i][j][k] * (input[k + offset] - minPrice) / scalePrice;
           } else {
-            sum += weights[i][j][k] * ((float) (input[k + offset] - minVolume) * scaleVolume);
+            sum += weights[i][j][k] * (input[k + offset] - minVolume) / scaleVolume;
           }
         }
         cur[j] = sum > thresholds[i][j];
