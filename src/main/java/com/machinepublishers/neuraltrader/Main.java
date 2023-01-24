@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 
 public class Main {
 
-  private static final int TRIES = 1024;
+  private static final int TRIES = 64;
   private static final int CHANCE = 100_000;
   private static final float MARGIN = .04f;
   private static final int PRICE_HISTORY = 2 * 24 * 60;
@@ -163,7 +163,10 @@ public class Main {
   }
 
   private static NeuralNet randOther(int index, boolean sameGroup) {
-    int randGroup = sameGroup ? index / GROUP_SIZE : rand.nextInt(GROUPS);
+    int myGroup = index / GROUP_SIZE;
+    int randGroup = sameGroup ? myGroup : rand.nextInt(GROUPS);
+    randGroup += sameGroup || randGroup < myGroup ? 0 : 1;
+    randGroup = randGroup == GROUPS ? 0 : randGroup;
     int randIndex = rand.nextInt(GROUP_SIZE) + (GROUP_SIZE * randGroup);
     boolean avoidSelf = sameGroup && randIndex >= index;
     boolean overflow = (randIndex + 1) % GROUP_SIZE == 0;
@@ -181,56 +184,21 @@ public class Main {
     NeuralNet[] nets = new NeuralNet[3];
     nets[0] = (nets[0] = prev(index)) == orig ? null : nets[0];
     nets[1] = orig;
-    nets[2] =
-        rand.nextInt(2) == 0 ? orig.mergeAndMutate(randOther(index, true), 50, factor * MARGIN,
-            factor * CHANCE) : (rand.nextInt(100) == 0 ? randOther(index, true).clone(index)
-            : (compete && rand.nextInt(500) == 0 ? randOther(index, false).clone(index)
-                : orig.mutate(factor * MARGIN, factor * CHANCE)));
-    NeuralNet next = compete ? evalScaled(nets, orig) : evalNormalized(nets);
-    if (next.equals(orig)) {
-      return orig;
+    int tries = TRIES;
+    if (rand.nextInt(2) == 0) {
+      nets[2] = orig.mergeAndMutate(randOther(index, true), 50, factor * MARGIN, factor * CHANCE);
+    } else if (compete && rand.nextInt(512) == 0) {
+      tries *= 512;
+      nets[2] = randOther(index, false).clone(index);
+    } else {
+      nets[2] = orig.mutate(factor * MARGIN, factor * CHANCE);
     }
-    NeuralNet tmp = orig;
-    NeuralNet mergeNext = null;
-    while (true) {
-      tmp = tmp.mergeAndMutate(next, 50, 0, 0);
-      if (tmp.equals(next)) {
-        break;
-      }
-      if ((compete ? evalScaled(new NeuralNet[]{next, tmp}, next)
-          : evalNormalized(new NeuralNet[]{next, tmp})) == tmp) {
-        mergeNext = tmp;
-        break;
-      }
-    }
-    tmp = next;
-    NeuralNet mergeOrig = null;
-    while (true) {
-      tmp = tmp.mergeAndMutate(orig, 50, 0, 0);
-      if (tmp.equals(orig)) {
-        break;
-      }
-      if ((compete ? evalScaled(new NeuralNet[]{next, tmp}, next)
-          : evalNormalized(new NeuralNet[]{next, tmp})) == tmp) {
-        mergeOrig = tmp;
-      }
-    }
-    if (mergeNext == null && mergeOrig != null) {
-      next = mergeOrig;
-    } else if (mergeNext != null && mergeOrig == null) {
-      next = mergeNext;
-    } else if (mergeNext != null && mergeOrig != null) {
-      next = compete ? evalScaled(new NeuralNet[]{mergeNext, mergeOrig}, mergeOrig)
-          : evalNormalized(new NeuralNet[]{mergeNext, mergeOrig});
-    }
-    NeuralNet confirm = compete ? evalScaled(new NeuralNet[]{orig, next}, null)
-        : evalNormalized(new NeuralNet[]{orig, next});
-    return confirm == next ? next : orig;
+    return compete ? evalScaled(nets, orig, tries) : evalNormalized(nets, tries);
   }
 
-  private static NeuralNet evalNormalized(NeuralNet[] nets) {
+  private static NeuralNet evalNormalized(NeuralNet[] nets, int tries) {
     int[] noramlizedProfits = new int[nets.length];
-    for (int i = 0; i < TRIES; i++) {
+    for (int i = 0; i < tries; i++) {
       int[] data = prices.getData(true);
       int offset = randTime(data);
       for (int n = 0; n < nets.length; n++) {
@@ -253,10 +221,10 @@ public class Main {
     return nets[bestIndex];
   }
 
-  private static NeuralNet evalScaled(NeuralNet[] nets, NeuralNet defaultBest) {
+  private static NeuralNet evalScaled(NeuralNet[] nets, NeuralNet defaultBest, int tries) {
     int[] profits = new int[nets.length];
     int[] firstPlaceFinishes = new int[profits.length];
-    for (int i = 0; i < TRIES; i++) {
+    for (int i = 0; i < tries; i++) {
       int[] data = prices.getData(true);
       int offset = randTime(data);
       int best = Integer.MIN_VALUE;
