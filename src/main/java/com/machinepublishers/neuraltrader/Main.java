@@ -121,19 +121,15 @@ public class Main {
       net = net.exists() ? net : save(net.mutate(0, 0), index, true);
       NeuralNet prev = null;
       for (long x = 0; x < Long.MAX_VALUE; x++) {
-        for (int i = 0, max = x % 100 == 0 ? 100 : 1; i < max; i++) {
-          net = eval(net, index, false);
-          if (net != prev) {
-            save(net, index, false);
-            prev = net;
-          }
+        net = eval(net, index, false);
+        if (net != prev) {
+          save(net, index, false);
+          prev = net;
         }
-        for (int i = 0, max = x % 23 == 0 ? 100 : 1; i < max; i++) {
-          net = eval(net, index, true);
-          if (net != prev) {
-            save(net, index, false);
-            prev = net;
-          }
+        net = eval(net, index, true);
+        if (net != prev) {
+          save(net, index, false);
+          prev = net;
         }
       }
     });
@@ -146,7 +142,7 @@ public class Main {
   }
 
   private static NeuralNet initNet(int index) {
-    return NeuralNet.create(index, 7, 33, PRICE_HISTORY * 2);
+    return NeuralNet.create(index, 5, 33, PRICE_HISTORY * 2);
   }
 
   private static NeuralNet save(NeuralNet next, int index, boolean toDisk) {
@@ -164,15 +160,11 @@ public class Main {
 
   private static NeuralNet randOther(int index, boolean sameGroup) {
     int myGroup = index / GROUP_SIZE;
-    int randGroup = sameGroup ? myGroup : rand.nextInt(GROUPS);
+    int randGroup = sameGroup ? myGroup : rand.nextInt(GROUPS - 1);
     randGroup += sameGroup || randGroup < myGroup ? 0 : 1;
-    randGroup = randGroup == GROUPS ? 0 : randGroup;
-    int randIndex = rand.nextInt(GROUP_SIZE) + (GROUP_SIZE * randGroup);
-    boolean avoidSelf = sameGroup && randIndex >= index;
-    boolean overflow = (randIndex + 1) % GROUP_SIZE == 0;
-    randIndex = avoidSelf && overflow ? randIndex + 1 - GROUP_SIZE
-        : (avoidSelf && !overflow ? randIndex + 1 : randIndex);
-    return nets.get(randIndex);
+    int randItem = rand.nextInt(sameGroup ? GROUP_SIZE - 1 : GROUP_SIZE);
+    randItem += !sameGroup || randItem < index % GROUP_SIZE ? 0 : 1;
+    return nets.get(randGroup * GROUP_SIZE + randItem);
   }
 
   private static int randTime(int[] data) {
@@ -187,9 +179,12 @@ public class Main {
     int tries = TRIES;
     if (rand.nextInt(2) == 0) {
       nets[2] = orig.mergeAndMutate(randOther(index, true), 50, factor * MARGIN, factor * CHANCE);
-    } else if (compete && rand.nextInt(512) == 0) {
-      tries *= 512;
+    } else if (compete && rand.nextInt(500) == 0) {
+      tries *= 50;
       nets[2] = randOther(index, false).clone(index);
+    } else if (compete && rand.nextInt(50) == 0) {
+      tries *= 10;
+      nets[2] = randOther(index, true).clone(index);
     } else {
       nets[2] = orig.mutate(factor * MARGIN, factor * CHANCE);
     }
