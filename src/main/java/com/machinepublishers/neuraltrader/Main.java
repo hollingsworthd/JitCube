@@ -173,20 +173,22 @@ public class Main {
 
   private static NeuralNet eval(NeuralNet orig, int index, boolean compete) {
     int factor = index / GROUP_SIZE + 1;
-    NeuralNet[] nets = new NeuralNet[3];
+    NeuralNet[] nets = new NeuralNet[5];
     nets[0] = (nets[0] = prev(index)) == orig ? null : nets[0];
-    nets[1] = orig;
+    nets[1] = nets[0] == null ? null : nets[0].mutate(factor * MARGIN, factor * CHANCE);
+    nets[2] = orig;
+    nets[3] = orig.mergeAndMutate(randOther(index, true), 50, factor * MARGIN, factor * CHANCE);
     int tries = TRIES;
-    if (rand.nextInt(2) == 0) {
-      nets[2] = orig.mergeAndMutate(randOther(index, true), 50, factor * MARGIN, factor * CHANCE);
+    if (rand.nextInt(5) == 0) {
+      nets[4] = orig.mergeAndMutate(randOther(index, true), 50, factor * MARGIN, factor * CHANCE);
     } else if (compete && rand.nextInt(500) == 0) {
       tries *= 50;
-      nets[2] = randOther(index, false).clone(index);
+      nets[4] = randOther(index, false).clone(index);
     } else if (compete && rand.nextInt(50) == 0) {
       tries *= 10;
-      nets[2] = randOther(index, true).clone(index);
+      nets[4] = randOther(index, true).clone(index);
     } else {
-      nets[2] = orig.mutate(factor * MARGIN, factor * CHANCE);
+      nets[4] = orig.mutate(factor * MARGIN, factor * CHANCE);
     }
     return compete ? evalScaled(nets, orig, tries) : evalNormalized(nets, tries);
   }
