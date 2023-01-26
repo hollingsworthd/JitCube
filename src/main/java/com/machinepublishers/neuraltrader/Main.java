@@ -179,13 +179,13 @@ public class Main {
     nets[2] = orig;
     nets[3] = orig.mergeAndMutate(randOther(index, true), 50, factor * MARGIN, factor * CHANCE);
     int tries = TRIES;
-    if (rand.nextInt(5) == 0) {
-      nets[4] = orig.mergeAndMutate(randOther(index, true), 50, factor * MARGIN, factor * CHANCE);
-    } else if (compete && rand.nextInt(500) == 0) {
-      tries *= 50;
+    if (compete && rand.nextInt(30_000) == 0) {
+      tries *= 30;
       nets[4] = randOther(index, false).clone(index);
-    } else if (compete && rand.nextInt(50) == 0) {
-      tries *= 10;
+    } else if (rand.nextInt(3) == 0) {
+      nets[4] = orig.mergeAndMutate(randOther(index, true), 50, factor * MARGIN, factor * CHANCE);
+    } else if (compete && rand.nextInt(300) == 0) {
+      tries *= 30;
       nets[4] = randOther(index, true).clone(index);
     } else {
       nets[4] = orig.mutate(factor * MARGIN, factor * CHANCE);
@@ -220,42 +220,44 @@ public class Main {
 
   private static NeuralNet evalScaled(NeuralNet[] nets, NeuralNet defaultBest, int tries) {
     int[] profits = new int[nets.length];
-    int[] firstPlaceFinishes = new int[profits.length];
+    int[] firstPlaceFinishes = new int[nets.length];
+    int[] curProfits = new int[nets.length];
     for (int i = 0; i < tries; i++) {
       int[] data = prices.getData(true);
       int offset = randTime(data);
-      int best = Integer.MIN_VALUE;
-      int bestIndex = -1;
+      int bestProfit = Integer.MIN_VALUE;
       for (int n = 0; n < nets.length; n++) {
         if (nets[n] != null) {
           int profit = profit(nets[n], data, offset, false);
           profits[n] += profit;
-          if (profit >= best) {
-            best = profit;
-            bestIndex = n;
+          curProfits[n] = profit;
+          if (profit > bestProfit) {
+            bestProfit = profit;
           }
         }
       }
-      ++firstPlaceFinishes[bestIndex];
-    }
-    int bestProfit = Integer.MIN_VALUE;
-    int bestProfitIndex = -1;
-    int bestPlace = Integer.MIN_VALUE;
-    int bestPlaceIndex = -1;
-    for (int i = 0; i < profits.length; i++) {
-      if (nets[i] != null) {
-        if (profits[i] >= bestProfit) {
-          bestProfit = profits[i];
-          bestProfitIndex = i;
-        }
-        if (firstPlaceFinishes[i] >= bestPlace) {
-          bestPlace = firstPlaceFinishes[i];
-          bestPlaceIndex = i;
+      for (int n = 0; n < nets.length; n++) {
+        if (nets[n] != null && curProfits[n] == bestProfit) {
+          ++firstPlaceFinishes[n];
         }
       }
     }
-    if (bestProfitIndex == bestPlaceIndex) {
-      return nets[bestProfitIndex];
+    int bestProfit = Integer.MIN_VALUE;
+    int bestPlace = Integer.MIN_VALUE;
+    for (int n = 0; n < profits.length; n++) {
+      if (nets[n] != null) {
+        if (profits[n] > bestProfit) {
+          bestProfit = profits[n];
+        }
+        if (firstPlaceFinishes[n] > bestPlace) {
+          bestPlace = firstPlaceFinishes[n];
+        }
+      }
+    }
+    for (int n = nets.length - 1; n > -1; n--) {
+      if (nets[n] != null && profits[n] == bestProfit && firstPlaceFinishes[n] == bestPlace) {
+        return nets[n];
+      }
     }
     return defaultBest;
   }
