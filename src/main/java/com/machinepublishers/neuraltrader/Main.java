@@ -148,7 +148,7 @@ public class Main {
   }
 
   private static NeuralNet initNet(int index) {
-    return NeuralNet.create(index, 24, 33, PRICE_HISTORY * 2);
+    return NeuralNet.create(index, 33, 24, PRICE_HISTORY * 2);
   }
 
   private static NeuralNet save(NeuralNet next, int index, boolean toDisk) {
