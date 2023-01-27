@@ -46,7 +46,7 @@ public class Main {
           }
         }
         try {
-          Thread.sleep(60 * 1000);
+          Thread.sleep(30 * 60 * 1000);
         } catch (InterruptedException e) {
           throw new RuntimeException(e);
         }
@@ -57,6 +57,7 @@ public class Main {
     }
     new Thread(() -> {
       int[] profitHistory = new int[30];
+      int[][] profitHistoryDetail = new int[NETS][30];
       double[] scaleHistory = new double[30];
       for (long x = 0; x < Long.MAX_VALUE; x++) {
         int[] data = prices.getData(false);
@@ -77,7 +78,7 @@ public class Main {
         maxProfit /= 100d;
         maxLoss /= 100d;
         Log.info("========================================");
-        Log.info("===== $%.2f : -$%.2f ", maxProfit, Math.abs(maxLoss));
+        Log.info("===== $%.2f : %.2f ", maxProfit, maxLoss);
         Log.info("========================================");
         int totalProfit = 0;
         int totalScale = 0;
@@ -86,7 +87,12 @@ public class Main {
           int profit = profit(net, data, offset, false);
           totalProfit += profit;
           totalScale += profit - center;
-          Log.info("=> N%02d: %.2f", n, profit / 100d);
+          profitHistoryDetail[n][(int) (x % profitHistoryDetail[n].length)] = profit;
+          int detailTotal = 0;
+          for (int i = 0; i < profitHistoryDetail[n].length; i++) {
+            detailTotal += profitHistoryDetail[n][i];
+          }
+          Log.info("=> N%02d: %.2f (%.2f)", n, profit / 100d, detailTotal / 100d);
         }
         profitHistory[(int) (x % profitHistory.length)] = totalProfit;
         scaleHistory[(int) (x % scaleHistory.length)] = Math.min(1,
@@ -179,18 +185,20 @@ public class Main {
     nets[2] = orig;
     nets[3] = orig.mergeAndMutate(randOther(index, true), 50, factor * MARGIN, factor * CHANCE);
     int tries = TRIES;
-    if (compete && rand.nextInt(30_000) == 0) {
-      tries *= 30;
+    boolean intergroup = false;
+    if (compete && rand.nextInt(5_000) == 0) {
+      tries *= 50;
       nets[4] = randOther(index, false).clone(index);
-    } else if (rand.nextInt(3) == 0) {
+      intergroup = true;
+    } else if (rand.nextInt(5) == 0) {
       nets[4] = orig.mergeAndMutate(randOther(index, true), 50, factor * MARGIN, factor * CHANCE);
-    } else if (compete && rand.nextInt(300) == 0) {
-      tries *= 30;
+    } else if (compete && rand.nextInt(500) == 0) {
+      tries *= 50;
       nets[4] = randOther(index, true).clone(index);
     } else {
       nets[4] = orig.mutate(factor * MARGIN, factor * CHANCE);
     }
-    return compete ? evalScaled(nets, orig, tries) : evalNormalized(nets, tries);
+    return compete ? evalScaled(nets, orig, tries, !intergroup) : evalNormalized(nets, tries);
   }
 
   private static NeuralNet evalNormalized(NeuralNet[] nets, int tries) {
@@ -218,12 +226,13 @@ public class Main {
     return nets[bestIndex];
   }
 
-  private static NeuralNet evalScaled(NeuralNet[] nets, NeuralNet defaultBest, int tries) {
+  private static NeuralNet evalScaled(NeuralNet[] nets, NeuralNet defaultBest, int tries,
+      boolean primaryData) {
     int[] profits = new int[nets.length];
     int[] firstPlaceFinishes = new int[nets.length];
     int[] curProfits = new int[nets.length];
     for (int i = 0; i < tries; i++) {
-      int[] data = prices.getData(true);
+      int[] data = prices.getData(primaryData);
       int offset = randTime(data);
       int bestProfit = Integer.MIN_VALUE;
       for (int n = 0; n < nets.length; n++) {
