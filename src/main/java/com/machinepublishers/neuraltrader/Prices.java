@@ -19,20 +19,20 @@ public class Prices {
   private static final Random rand = new SecureRandom();
 
   private final int[][] training;
-  private final int[][] testing;
+  private final int[][] alt;
   private final int[] oddsTraining;
-  private final int[] oddsTesting;
+  private final int[] oddsAlt;
 
   public Prices() {
     List<int[]> data = Stream.of(new File("./prices/training").listFiles())
         .filter(f -> !f.getName().startsWith(".")).map(Prices::load).collect(Collectors.toList());
     training = data.toArray(new int[0][]);
-    data = Stream.of(new File("./prices/testing").listFiles())
+    data = Stream.of(new File("./prices/alt").listFiles())
         .filter(f -> !f.getName().startsWith(".")).map(Prices::load).collect(Collectors.toList());
-    testing = data.toArray(new int[0][]);
+    alt = data.toArray(new int[0][]);
 
     oddsTraining = initOdds(training);
-    oddsTesting = initOdds(testing);
+    oddsAlt = initOdds(alt);
   }
 
   private static int[] initOdds(int[][] data) {
@@ -102,8 +102,8 @@ public class Prices {
   }
 
   public int[] getData(boolean training) {
-    int[][] data = training ? this.training : this.testing;
-    int[] odds = training ? this.oddsTraining : this.oddsTesting;
+    int[][] data = training ? this.training : this.alt;
+    int[] odds = training ? this.oddsTraining : this.oddsAlt;
     return data[odds[rand.nextInt(odds.length)]];
   }
 }

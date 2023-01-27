@@ -6,10 +6,10 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 
 public class Main {
 
-  private static final int TRIES = 64;
+  private static final int TRIES = 32;
   private static final int CHANCE = 100_000;
   private static final float MARGIN = .04f;
-  private static final int PRICE_HISTORY = 2 * 24 * 60;
+  private static final int PRICE_HISTORY = 24 * 60;
   private static final int WINDOW = 60;
   private static final int GROUPS = 4;
   private static final int GROUP_SIZE = 2;
@@ -46,7 +46,7 @@ public class Main {
           }
         }
         try {
-          Thread.sleep(30 * 60 * 1000);
+          Thread.sleep(1 * 60 * 1000);
         } catch (InterruptedException e) {
           throw new RuntimeException(e);
         }
@@ -148,7 +148,7 @@ public class Main {
   }
 
   private static NeuralNet initNet(int index) {
-    return NeuralNet.create(index, 5, 33, PRICE_HISTORY * 2);
+    return NeuralNet.create(index, 24, 33, PRICE_HISTORY * 2);
   }
 
   private static NeuralNet save(NeuralNet next, int index, boolean toDisk) {
@@ -186,15 +186,15 @@ public class Main {
     nets[3] = orig.mergeAndMutate(randOther(index, true), 50, factor * MARGIN, factor * CHANCE);
     int tries = TRIES;
     boolean intergroup = false;
-    if (compete && rand.nextInt(5_000) == 0) {
-      tries *= 50;
+    if (compete && rand.nextInt(500) == 0) {
+      tries *= 10;
       nets[4] = randOther(index, false).clone(index);
       intergroup = true;
+    } else if (compete && rand.nextInt(50) == 0) {
+      tries *= 10;
+      nets[4] = randOther(index, true).clone(index);
     } else if (rand.nextInt(5) == 0) {
       nets[4] = orig.mergeAndMutate(randOther(index, true), 50, factor * MARGIN, factor * CHANCE);
-    } else if (compete && rand.nextInt(500) == 0) {
-      tries *= 50;
-      nets[4] = randOther(index, true).clone(index);
     } else {
       nets[4] = orig.mutate(factor * MARGIN, factor * CHANCE);
     }
