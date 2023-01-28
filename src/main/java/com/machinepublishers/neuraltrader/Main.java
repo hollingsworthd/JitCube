@@ -127,12 +127,7 @@ public class Main {
       net = net.exists() ? net : save(net.mutate(0, 0), index, true);
       NeuralNet prev = null;
       for (long x = 0; x < Long.MAX_VALUE; x++) {
-        net = eval(net, index, false);
-        if (net != prev) {
-          save(net, index, false);
-          prev = net;
-        }
-        net = eval(net, index, true);
+        net = eval(net, index);
         if (net != prev) {
           save(net, index, false);
           prev = net;
@@ -177,58 +172,29 @@ public class Main {
     return rand.nextInt((data.length - BUFFER_LEN) / 2);
   }
 
-  private static NeuralNet eval(NeuralNet orig, int index, boolean compete) {
+  private static NeuralNet eval(NeuralNet orig, int index) {
     int factor = index / GROUP_SIZE + 1;
     NeuralNet[] nets = new NeuralNet[5];
-    nets[0] = (nets[0] = prev(index)) == orig ? null : nets[0];
-    nets[1] = nets[0] == null ? null : nets[0].mutate(factor * MARGIN, factor * CHANCE);
-    nets[2] = orig;
-    nets[3] = orig.mergeAndMutate(randOther(index, true), 50, factor * MARGIN, factor * CHANCE);
+    nets[0] = orig;
+    nets[1] = orig.mergeAndMutate(randOther(index, true), 50, factor * MARGIN, factor * CHANCE);
     int tries = TRIES;
     boolean intergroup = false;
-    if (compete && rand.nextInt(500) == 0) {
+    if (rand.nextInt(5_000) == 0) {
       tries *= 10;
-      nets[4] = randOther(index, false).clone(index);
+      nets[2] = randOther(index, false).clone(index);
       intergroup = true;
-    } else if (compete && rand.nextInt(50) == 0) {
-      tries *= 10;
-      nets[4] = randOther(index, true).clone(index);
-    } else if (rand.nextInt(5) == 0) {
-      nets[4] = orig.mergeAndMutate(randOther(index, true), 50, factor * MARGIN, factor * CHANCE);
+    } else if (rand.nextInt(500) == 0) {
+      tries *= 2;
+      nets[2] = randOther(index, true).clone(index);
     } else {
-      nets[4] = orig.mutate(factor * MARGIN, factor * CHANCE);
+      nets[2] = orig.mutate(factor * MARGIN, factor * CHANCE);
     }
-    return compete ? evalScaled(nets, orig, tries, !intergroup) : evalNormalized(nets, tries);
+    nets[3] = (nets[3] = prev(index)) == orig ? null : nets[3];
+    nets[4] = nets[3] == null ? null : nets[3].mutate(factor * MARGIN, factor * CHANCE);
+    return evalScaled(nets, tries, !intergroup);
   }
 
-  private static NeuralNet evalNormalized(NeuralNet[] nets, int tries) {
-    int[] noramlizedProfits = new int[nets.length];
-    for (int i = 0; i < tries; i++) {
-      int[] data = prices.getData(true);
-      int offset = randTime(data);
-      for (int n = 0; n < nets.length; n++) {
-        if (nets[n] != null) {
-          noramlizedProfits[n] += profit(nets[n], data, offset, true);
-        }
-      }
-    }
-    int best = Integer.MIN_VALUE;
-    int bestIndex = -1;
-    for (int n = 0; n < noramlizedProfits.length; n++) {
-      if (nets[n] != null) {
-        int cur = noramlizedProfits[n];
-        if (cur >= best) {
-          best = cur;
-          bestIndex = n;
-        }
-      }
-    }
-    return nets[bestIndex];
-  }
-
-  private static NeuralNet evalScaled(NeuralNet[] nets, NeuralNet defaultBest, int tries,
-      boolean primaryData) {
-    int[] profits = new int[nets.length];
+  private static NeuralNet evalScaled(NeuralNet[] nets, int tries, boolean primaryData) {
     int[] firstPlaceFinishes = new int[nets.length];
     int[] curProfits = new int[nets.length];
     for (int i = 0; i < tries; i++) {
@@ -238,7 +204,6 @@ public class Main {
       for (int n = 0; n < nets.length; n++) {
         if (nets[n] != null) {
           int profit = profit(nets[n], data, offset, false);
-          profits[n] += profit;
           curProfits[n] = profit;
           if (profit > bestProfit) {
             bestProfit = profit;
@@ -251,24 +216,20 @@ public class Main {
         }
       }
     }
-    int bestProfit = Integer.MIN_VALUE;
     int bestPlace = Integer.MIN_VALUE;
-    for (int n = 0; n < profits.length; n++) {
+    for (int n = 0; n < nets.length; n++) {
       if (nets[n] != null) {
-        if (profits[n] > bestProfit) {
-          bestProfit = profits[n];
-        }
         if (firstPlaceFinishes[n] > bestPlace) {
           bestPlace = firstPlaceFinishes[n];
         }
       }
     }
     for (int n = nets.length - 1; n > -1; n--) {
-      if (nets[n] != null && profits[n] == bestProfit && firstPlaceFinishes[n] == bestPlace) {
+      if (nets[n] != null && firstPlaceFinishes[n] == bestPlace) {
         return nets[n];
       }
     }
-    return defaultBest;
+    return nets[0];
   }
 
   private static int profit(NeuralNet net, int[] data, int offset, boolean normalize) {
