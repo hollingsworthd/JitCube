@@ -7,8 +7,8 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 public class Main {
 
   private static final int TRIES = 32;
-  private static final int CHANCE = 100_000;
-  private static final float MARGIN = .04f;
+  private static final int CHANCE = 50_000;
+  private static final float MARGIN = .02f;
   private static final int PRICE_HISTORY = 24 * 60;
   private static final int WINDOW = 60;
   private static final int GROUPS = 4;
@@ -176,29 +176,27 @@ public class Main {
     int factor = index / GROUP_SIZE + 1;
     NeuralNet[] nets = new NeuralNet[5];
     nets[0] = orig;
-    nets[1] = orig.mergeAndMutate(randOther(index, true), 50, factor * MARGIN, factor * CHANCE);
+    nets[1] = orig.mergeAndMutate(randOther(index, true), 25, factor * MARGIN, factor * CHANCE);
     int tries = TRIES;
-    boolean intergroup = false;
-    if (rand.nextInt(1_000) == 0) {
-      tries *= 10;
+    if (rand.nextInt(100_000) == 0) {
+      tries *= 16;
       nets[2] = randOther(index, false).clone(index);
-      intergroup = true;
-    } else if (rand.nextInt(100) == 0) {
-      tries *= 2;
+    } else if (rand.nextInt(1_000) == 0) {
+      tries *= 16;
       nets[2] = randOther(index, true).clone(index);
     } else {
       nets[2] = orig.mutate(factor * MARGIN, factor * CHANCE);
     }
     nets[3] = (nets[3] = prev(index)) == orig ? null : nets[3];
     nets[4] = nets[3] == null ? null : nets[3].mutate(factor * MARGIN, factor * CHANCE);
-    return evalScaled(nets, tries, !intergroup);
+    return evalScaled(nets, tries);
   }
 
-  private static NeuralNet evalScaled(NeuralNet[] nets, int tries, boolean primaryData) {
+  private static NeuralNet evalScaled(NeuralNet[] nets, int tries) {
     int[] firstPlaceFinishes = new int[nets.length];
     int[] curProfits = new int[nets.length];
     for (int i = 0; i < tries; i++) {
-      int[] data = prices.getData(primaryData);
+      int[] data = prices.getData(true);
       int offset = randTime(data);
       int bestProfit = Integer.MIN_VALUE;
       for (int n = 0; n < nets.length; n++) {
