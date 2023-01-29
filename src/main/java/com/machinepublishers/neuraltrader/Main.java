@@ -8,7 +8,7 @@ public class Main {
 
   private static final int TRIES = 32;
   private static final int CHANCE = 50_000;
-  private static final float MARGIN = .02f;
+  private static final double MARGIN = .02d;
   private static final int PRICE_HISTORY = 24 * 60;
   private static final int WINDOW = 60;
   private static final int GROUPS = 4;

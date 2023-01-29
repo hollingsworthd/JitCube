@@ -160,10 +160,10 @@ public class NeuralNet {
         for (int j = 0; j < weights[i].length; j++) {
           for (int k = 0; k < weights[i][j].length; k++) {
             if (rand.nextInt(1_000_000) < mutationsPerMillion) {
-              double sign = rand.nextBoolean() ? 1f : -1f;
+              double sign = rand.nextBoolean() ? 1d : -1d;
               double newVal = sign * rand.nextDouble(0, margin) + weights[i][j][k];
-              newVal = newVal > 1f ? 1f : newVal;
-              newVal = newVal < -1f ? -1f : newVal;
+              newVal = newVal > 1d ? 1d : newVal;
+              newVal = newVal < -1d ? -1d : newVal;
               weights[i][j][k] = newVal;
             }
           }
@@ -178,10 +178,10 @@ public class NeuralNet {
       for (int i = 0; i < thresholds.length; i++) {
         for (int j = 0; j < thresholds[i].length; j++) {
           if (rand.nextInt(1_000_000) < mutationsPerMillion) {
-            double sign = rand.nextBoolean() ? 1f : -1f;
+            double sign = rand.nextBoolean() ? 1d : -1d;
             double newVal = sign * rand.nextDouble(0, margin) + thresholds[i][j];
-            newVal = newVal > 1f ? 1f : newVal;
-            newVal = newVal < -1f ? -1f : newVal;
+            newVal = newVal > 1d ? 1d : newVal;
+            newVal = newVal < -1d ? -1d : newVal;
             thresholds[i][j] = newVal;
           }
         }
@@ -249,7 +249,7 @@ public class NeuralNet {
     boolean[] cur = new boolean[weights[0].length];
     for (int i = 0; i < weights.length; i++) {
       for (int j = 0; j < weights[i].length; j++) {
-        double sum = 0f;
+        double sum = 0d;
         for (int k = 0; k < weights[i][j].length; k++) {
           if (j != 0 || i != 0) {
             if (prev[k]) {
