@@ -84,7 +84,7 @@ public class Main {
         int totalScale = 0;
         for (int n = 0; n < NETS; n++) {
           NeuralNet net = getNet(n);
-          int profit = profit(net, data, offset, false);
+          int profit = profit(net, data, offset);
           totalProfit += profit;
           totalScale += profit - center;
           profitHistoryDetail[n][(int) (x % profitHistoryDetail[n].length)] = profit;
@@ -126,7 +126,7 @@ public class Main {
       NeuralNet net = getNet(index);
       net = net.exists() ? net : save(net.mutate(0, 0), index, true);
       NeuralNet prev = null;
-      for (long x = 0; x < Long.MAX_VALUE; x++) {
+      while (true) {
         net = eval(net, index);
         if (net != prev) {
           save(net, index, false);
@@ -179,11 +179,11 @@ public class Main {
     nets[1] = orig.mergeAndMutate(randOther(index, true), 50, factor * MARGIN, factor * CHANCE);
     int tries = TRIES;
     boolean intergroup = false;
-    if (rand.nextInt(5_000) == 0) {
+    if (rand.nextInt(1_000) == 0) {
       tries *= 10;
       nets[2] = randOther(index, false).clone(index);
       intergroup = true;
-    } else if (rand.nextInt(500) == 0) {
+    } else if (rand.nextInt(100) == 0) {
       tries *= 2;
       nets[2] = randOther(index, true).clone(index);
     } else {
@@ -203,7 +203,7 @@ public class Main {
       int bestProfit = Integer.MIN_VALUE;
       for (int n = 0; n < nets.length; n++) {
         if (nets[n] != null) {
-          int profit = profit(nets[n], data, offset, false);
+          int profit = profit(nets[n], data, offset);
           curProfits[n] = profit;
           if (profit > bestProfit) {
             bestProfit = profit;
@@ -232,7 +232,7 @@ public class Main {
     return nets[0];
   }
 
-  private static int profit(NeuralNet net, int[] data, int offset, boolean normalize) {
+  private static int profit(NeuralNet net, int[] data, int offset) {
     int buyTime = -1;
     int buyOffset = -1;
     for (int t = WINDOW * 2; t > WINDOW; t--) {
@@ -247,12 +247,11 @@ public class Main {
       for (int t = buyTime - 1; t > buyTime - 1 - WINDOW; t--) {
         int cur = (offset + t - 1) * 2;
         if (Decision.SELL == net.decide(data, cur)) {
-          int profit = data[cur] - data[buyOffset];
-          return normalize ? (profit > 0 ? 1 : -1) : data[cur] - data[buyOffset];
+          return data[cur] - data[buyOffset];
         }
       }
-      return normalize ? -3 : data[(offset + buyTime - WINDOW - 1) * 2] - data[buyOffset];
+      return data[(offset + buyTime - WINDOW - 1) * 2] - data[buyOffset];
     }
-    return normalize ? -2 : 0;
+    return 0;
   }
 }
