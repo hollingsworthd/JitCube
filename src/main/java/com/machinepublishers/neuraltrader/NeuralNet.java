@@ -1,11 +1,6 @@
 package com.machinepublishers.neuraltrader;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Random;
@@ -19,37 +14,37 @@ public class NeuralNet {
     DATA.mkdirs();
   }
 
+  private final boolean[] buffer;
+  private final int id;
   private final File file;
   private final File prev;
   private final double[][][] weights;
   private final double[][] thresholds;
 
-  private NeuralNet(File saveTo, double[][][] weights, double[][] thresholds) {
+  private NeuralNet(int id, File saveTo, double[][][] weights, double[][] thresholds) {
+    this.id = id;
     this.file = saveTo;
     this.prev = initPrev(saveTo);
     this.weights = weights;
     this.thresholds = thresholds;
+    this.buffer = new boolean[this.weights[0].length];
   }
 
-  private NeuralNet(File saveTo, int layers, int len, int inputLen) {
+  private NeuralNet(int id, File saveTo, int layers, int len, int inputLen) {
+    this.id = id;
     this.file = saveTo;
     this.prev = initPrev(saveTo);
     layers += 1;
-    weights = initWeights(layers, len, inputLen);
-    thresholds = initThresholds(layers, len);
+    this.weights = initWeights(layers, len, inputLen);
+    this.thresholds = initThresholds(layers, len);
+    this.buffer = new boolean[this.weights[0].length];
   }
 
-  private NeuralNet(File readFrom, File saveTo) {
+  private NeuralNet(int id, File readFrom, File saveTo) {
+    this.id = id;
     this.file = saveTo;
     this.prev = initPrev(saveTo);
-    String[] lines;
-    synchronized (NeuralNet.class) {
-      try {
-        lines = Files.readAllLines(readFrom.toPath()).toArray(new String[0]);
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
-    }
+    String[] lines = LockedFile.read(readFrom).split("\n");
 
     String[] dimensions = lines[0].split("/");
     int layers = Integer.parseInt(dimensions[0]);
@@ -75,18 +70,26 @@ public class NeuralNet {
     }
     this.weights = weights;
     this.thresholds = thresholds;
+    this.buffer = new boolean[this.weights[0].length];
+  }
+
+  public static NeuralNet create(int idFrom, int idTo) {
+    return new NeuralNet(idTo, new File(DATA, "n" + idFrom), new File(DATA, "n" + idTo));
   }
 
   public static NeuralNet create(int id, int layers, int len, int inputLen) {
     File file = new File(DATA, "n" + id);
-    if (file.exists()) {
-      return new NeuralNet(file, file);
+    if (LockedFile.exists(file)) {
+      return new NeuralNet(id, file, file);
     }
-    return new NeuralNet(file, layers, len, inputLen);
+    NeuralNet net = new NeuralNet(id, file, layers, len, inputLen);
+    net.save();
+    net.savePrev();
+    return net;
   }
 
   private static File initPrev(File file) {
-    return new File(DATA, "." + file.getName() + ".prev");
+    return new File(DATA, file.getName() + ".prev");
   }
 
   private static double[][][] initWeights(int layers, int len, int inputLen) {
@@ -190,48 +193,35 @@ public class NeuralNet {
     return thresholds;
   }
 
-  private static synchronized void write(NeuralNet net, File file) {
-    try {
-      Path tmp = new File(file.getParentFile(),
-          (file.getName().startsWith(".") ? "" : ".") + file.getName() + ".tmp").toPath();
-      Files.writeString(tmp, net.toString(), StandardOpenOption.CREATE, StandardOpenOption.WRITE,
-          StandardOpenOption.TRUNCATE_EXISTING);
-      Files.move(tmp, file.toPath(), StandardCopyOption.REPLACE_EXISTING,
-          StandardCopyOption.ATOMIC_MOVE);
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    }
-  }
-
   public NeuralNet clone(int newId) {
-    return new NeuralNet(new File(DATA, "n" + newId), weights, thresholds);
+    return new NeuralNet(newId, new File(DATA, "n" + newId), weights, thresholds);
   }
 
   public NeuralNet mutate(double margin, int mutationsPerMillion) {
-    return new NeuralNet(this.file, mutate(copy(weights), margin, mutationsPerMillion),
+    return new NeuralNet(id, file, mutate(copy(weights), margin, mutationsPerMillion),
         mutate(copy(thresholds), margin, mutationsPerMillion));
   }
 
   public NeuralNet mergeAndMutate(NeuralNet other, int mergesPercent, double margin,
       int mutationsPerMillion) {
-    return new NeuralNet(this.file,
+    return new NeuralNet(id, file,
         mutate(merge(mergesPercent, copy(weights), other.weights), margin, mutationsPerMillion),
         mutate(merge(mergesPercent, copy(thresholds), other.thresholds), margin,
             mutationsPerMillion));
   }
 
   public Decision decide(int[] input, int offset) {
-    boolean[] result = processDecision(input, offset);
-    if (result[0] && !result[1]) {
+    processDecision(input, offset);
+    if (buffer[0] && !buffer[1]) {
       return Decision.BUY;
     }
-    if (!result[0] && result[1]) {
+    if (!buffer[0] && buffer[1]) {
       return Decision.SELL;
     }
     return Decision.HOLD;
   }
 
-  private boolean[] processDecision(int[] input, int offset) {
+  private void processDecision(int[] input, int offset) {
     int maxPrice = Integer.MIN_VALUE;
     int minPrice = Integer.MAX_VALUE;
     int maxVolume = Integer.MIN_VALUE;
@@ -245,14 +235,12 @@ public class NeuralNet {
     }
     double scalePrice = maxPrice - minPrice;
     double scaleVolume = maxVolume - minVolume;
-    boolean[] prev = new boolean[weights[0].length];
-    boolean[] cur = new boolean[weights[0].length];
     for (int i = 0; i < weights.length; i++) {
       for (int j = 0; j < weights[i].length; j++) {
         double sum = 0d;
         for (int k = 0; k < weights[i][j].length; k++) {
           if (j != 0 || i != 0) {
-            if (prev[k]) {
+            if (buffer[k]) {
               sum += weights[i][j][k];
             }
           } else if (k % 2 == 0) {
@@ -261,17 +249,9 @@ public class NeuralNet {
             sum += weights[i][j][k] * (input[k + offset] - minVolume) / scaleVolume;
           }
         }
-        cur[j] = sum > thresholds[i][j];
+        buffer[j] = sum > thresholds[i][j];
       }
-      boolean[] tmp = prev;
-      prev = cur;
-      cur = tmp;
     }
-    return Arrays.copyOf(prev, weights[weights.length - 1].length);
-  }
-
-  public boolean exists() {
-    return file.exists();
   }
 
   @Override
@@ -310,17 +290,14 @@ public class NeuralNet {
   }
 
   public void save() {
-    write(this, file);
+    LockedFile.write(file, toString());
   }
 
   public void savePrev() {
-    write(this, prev);
+    LockedFile.write(prev, toString());
   }
 
   public NeuralNet getPrev() {
-    if (prev.exists()) {
-      return new NeuralNet(prev, file);
-    }
-    return null;
+    return new NeuralNet(id, prev, file);
   }
 }

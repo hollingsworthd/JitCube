@@ -1,35 +1,43 @@
 package com.machinepublishers.neuraltrader;
 
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
 public class Main {
 
+  public static final int NETS = 3;
+  private static final int GROUPS = 3;
+  private static final int GROUP = Integer.parseInt(System.getProperty("group"));
   private static final int TRIES = 32;
-  private static final int CHANCE = 50_000;
-  private static final double MARGIN = .02d;
+  private static final int CHANCE = 80_000;
+  private static final double MARGIN = .04d;
   private static final int PRICE_HISTORY = 24 * 60;
-  private static final int WINDOW = 60;
-  private static final int GROUPS = 4;
-  private static final int GROUP_SIZE = 2;
-  private static final int NETS = GROUPS * GROUP_SIZE;
-  private static final AtomicReferenceArray<NeuralNet> nets = new AtomicReferenceArray<>(NETS);
-  private static final AtomicReferenceArray<NeuralNet> prevNets = new AtomicReferenceArray<>(NETS);
+  private static final int WINDOW = 30;
+  private static final int BUFFER_LEN = 2 * (PRICE_HISTORY + WINDOW * 2);
+  private static final int EVAL_CHILDREN = 61;
+
   private static final Prices prices = new Prices();
   private static final Random rand = new SecureRandom();
-  private static final int BUFFER_LEN = 2 * (PRICE_HISTORY + WINDOW * 2);
+  private static final AtomicReferenceArray<NeuralNet> nets = new AtomicReferenceArray<>(NETS);
+  private static final AtomicReferenceArray<NeuralNet> prevNets = new AtomicReferenceArray<>(NETS);
+  private static final NeuralNet[][] evalNets = new NeuralNet[NETS][EVAL_CHILDREN + 2];
+  private static final NeuralNet[][] evalNetsExt = new NeuralNet[NETS][EVAL_CHILDREN + 3];
+  private static final int[][] firstPlaceFinishes = new int[NETS][evalNetsExt[0].length];
+  private static final int[][] curProfits = new int[NETS][evalNetsExt[0].length];
 
-  static {
+  public static void main(String[] args) {
+    for (int n = 0; n < NETS * GROUPS; n++) {
+      initNet(n);
+    }
     for (int n = 0; n < NETS; n++) {
-      NeuralNet net = initNet(n);
+      NeuralNet net = initNet(GROUP * NETS + n);
       NeuralNet prev = net.getPrev();
       nets.set(n, net);
       prevNets.set(n, prev == null ? net : prev);
     }
-  }
 
-  public static void main(String[] args) {
     Runtime.getRuntime().addShutdownHook(new Thread(() -> {
       for (int n = 0; n < NETS; n++) {
         nets.get(n).save();
@@ -37,24 +45,28 @@ public class Main {
       }
       Log.info("\nSaved.");
     }));
+
+    for (int n = 0; n < NETS; n++) {
+      startEval(getNet(n), n);
+    }
+    startTestLogs();
+    startAutoSave();
+  }
+
+  private static void startEval(NeuralNet net, int index) {
     new Thread(() -> {
+      NeuralNet cur = net;
       while (true) {
-        for (int n = 0; n < NETS; n++) {
-          NeuralNet net = getNet(n);
-          if (net != null) {
-            net.save();
-          }
-        }
-        try {
-          Thread.sleep(1 * 60 * 1000);
-        } catch (InterruptedException e) {
-          throw new RuntimeException(e);
+        NeuralNet next = eval(cur, index);
+        if (next != cur) {
+          save(next, index);
+          cur = next;
         }
       }
-    }).start();
-    for (int n = 0; n < NETS; n++) {
-      initThread(n).start();
-    }
+    }, "n" + (GROUP * NETS + index)).start();
+  }
+
+  private static void startTestLogs() {
     new Thread(() -> {
       int[] profitHistory = new int[30];
       int[][] profitHistoryDetail = new int[NETS][30];
@@ -92,7 +104,7 @@ public class Main {
           for (int i = 0; i < profitHistoryDetail[n].length; i++) {
             detailTotal += profitHistoryDetail[n][i];
           }
-          Log.info("=> N%02d: %.2f (%.2f)", n, profit / 100d, detailTotal / 100d);
+          Log.info("=> N%02d: %.2f (%.2f)", GROUP * NETS + n, profit / 100d, detailTotal / 100d);
         }
         profitHistory[(int) (x % profitHistory.length)] = totalProfit;
         scaleHistory[(int) (x % scaleHistory.length)] = Math.min(1,
@@ -113,7 +125,8 @@ public class Main {
             Math.abs(allTimeProfit / 100d));
         Log.info("========================================");
         try {
-          Thread.sleep(2_000);
+          long now = System.currentTimeMillis();
+          Thread.sleep(4000 - (now % 4000));
         } catch (InterruptedException e) {
           throw new RuntimeException(e);
         }
@@ -121,21 +134,20 @@ public class Main {
     }).start();
   }
 
-  private static Thread initThread(int index) {
-    Thread thread = new Thread(() -> {
-      NeuralNet net = getNet(index);
-      net = net.exists() ? net : save(net.mutate(0, 0), index, true);
-      NeuralNet prev = null;
+  private static void startAutoSave() {
+    new Thread(() -> {
       while (true) {
-        net = eval(net, index);
-        if (net != prev) {
-          save(net, index, false);
-          prev = net;
+        for (int n = 0; n < NETS; n++) {
+          nets.get(n).save();
+          prevNets.get(n).savePrev();
+        }
+        try {
+          Thread.sleep(10 * 60 * 1000);
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
         }
       }
-    });
-    thread.setName("n" + index);
-    return thread;
+    }).start();
   }
 
   private static NeuralNet getNet(int index) {
@@ -143,15 +155,11 @@ public class Main {
   }
 
   private static NeuralNet initNet(int index) {
-    return NeuralNet.create(index, 33, 24, PRICE_HISTORY * 2);
+    return NeuralNet.create(index, 33, 48, PRICE_HISTORY * 2);
   }
 
-  private static NeuralNet save(NeuralNet next, int index, boolean toDisk) {
-    NeuralNet prev = prevNets.getAndSet(index, nets.getAndSet(index, next));
-    if (toDisk) {
-      next.save();
-      prev.savePrev();
-    }
+  private static NeuralNet save(NeuralNet next, int index) {
+    prevNets.set(index, nets.getAndSet(index, next));
     return next;
   }
 
@@ -160,12 +168,15 @@ public class Main {
   }
 
   private static NeuralNet randOther(int index, boolean sameGroup) {
-    int myGroup = index / GROUP_SIZE;
-    int randGroup = sameGroup ? myGroup : rand.nextInt(GROUPS - 1);
-    randGroup += sameGroup || randGroup < myGroup ? 0 : 1;
-    int randItem = rand.nextInt(sameGroup ? GROUP_SIZE - 1 : GROUP_SIZE);
-    randItem += !sameGroup || randItem < index % GROUP_SIZE ? 0 : 1;
-    return nets.get(randGroup * GROUP_SIZE + randItem);
+    if (sameGroup) {
+      int randItem = rand.nextInt(NETS - 1);
+      randItem += randItem < index ? 0 : 1;
+      return nets.get(randItem);
+    }
+    int randItem = rand.nextInt(NETS);
+    int randGroup = rand.nextInt(GROUPS - 1);
+    randGroup += randGroup < GROUP ? 0 : 1;
+    return NeuralNet.create(randGroup * NETS + randItem, GROUP * NETS + index);
   }
 
   private static int randTime(int[] data) {
@@ -173,57 +184,56 @@ public class Main {
   }
 
   private static NeuralNet eval(NeuralNet orig, int index) {
-    int factor = index / GROUP_SIZE + 1;
-    NeuralNet[] nets = new NeuralNet[5];
-    nets[0] = orig;
-    nets[1] = orig.mergeAndMutate(randOther(index, true), 25, factor * MARGIN, factor * CHANCE);
-    int tries = TRIES;
-    if (rand.nextInt(100_000) == 0) {
-      tries *= 16;
-      nets[2] = randOther(index, false).clone(index);
-    } else if (rand.nextInt(1_000) == 0) {
-      tries *= 16;
-      nets[2] = randOther(index, true).clone(index);
+    int factor = GROUP + 1;
+    NeuralNet prev = prev(index);
+    NeuralNet[] nets = prev == orig ? evalNets[index] : evalNetsExt[index];
+    int i = 0;
+    NeuralNet sibling = randOther(index, true);
+    if (rand.nextInt(300) == 0) {
+      nets[i++] = randOther(index, false);
+    } else if (rand.nextInt(10) == 0) {
+      nets[i++] = sibling.clone(GROUP * NETS + index);
     } else {
-      nets[2] = orig.mutate(factor * MARGIN, factor * CHANCE);
+      nets[i++] = orig.mutate(factor * MARGIN, factor * CHANCE);
     }
-    nets[3] = (nets[3] = prev(index)) == orig ? null : nets[3];
-    nets[4] = nets[3] == null ? null : nets[3].mutate(factor * MARGIN, factor * CHANCE);
-    return evalScaled(nets, tries);
+    for (int x = 0; x < EVAL_CHILDREN; x++) {
+      nets[i++] = orig.mergeAndMutate(sibling, 25, factor * MARGIN, factor * CHANCE);
+    }
+    nets[i++] = orig;
+    if (prev != orig) {
+      nets[i] = prev;
+    }
+    return evalScaled(nets, index);
   }
 
-  private static NeuralNet evalScaled(NeuralNet[] nets, int tries) {
-    int[] firstPlaceFinishes = new int[nets.length];
-    int[] curProfits = new int[nets.length];
-    for (int i = 0; i < tries; i++) {
+  private static NeuralNet evalScaled(NeuralNet[] nets, int index) {
+    Arrays.fill(curProfits[index], 0);
+    Arrays.fill(firstPlaceFinishes[index], 0);
+    for (int i = 0; i < TRIES; i++) {
       int[] data = prices.getData(true);
       int offset = randTime(data);
       int bestProfit = Integer.MIN_VALUE;
       for (int n = 0; n < nets.length; n++) {
-        if (nets[n] != null) {
-          int profit = profit(nets[n], data, offset);
-          curProfits[n] = profit;
-          if (profit > bestProfit) {
-            bestProfit = profit;
-          }
+        int profit = profit(nets[n], data, offset);
+        curProfits[index][n] = profit;
+        if (profit > bestProfit) {
+          bestProfit = profit;
         }
       }
       for (int n = 0; n < nets.length; n++) {
-        if (nets[n] != null && curProfits[n] == bestProfit) {
-          ++firstPlaceFinishes[n];
+        if (curProfits[index][n] == bestProfit) {
+          ++firstPlaceFinishes[index][n];
         }
       }
     }
     int bestPlace = Integer.MIN_VALUE;
     for (int n = 0; n < nets.length; n++) {
-      if (nets[n] != null) {
-        if (firstPlaceFinishes[n] > bestPlace) {
-          bestPlace = firstPlaceFinishes[n];
-        }
+      if (firstPlaceFinishes[index][n] > bestPlace) {
+        bestPlace = firstPlaceFinishes[index][n];
       }
     }
     for (int n = nets.length - 1; n > -1; n--) {
-      if (nets[n] != null && firstPlaceFinishes[n] == bestPlace) {
+      if (firstPlaceFinishes[index][n] == bestPlace) {
         return nets[n];
       }
     }

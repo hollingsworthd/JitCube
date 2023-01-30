@@ -1,6 +1,7 @@
 plugins {
   id 'com.github.johnrengelman.shadow' version '7.1.2'
   id 'java'
+  id 'org.graalvm.buildtools.native' version '0.9.19'
 }
 
 version = '1.0.0-SNAPSHOT'
@@ -13,8 +14,8 @@ repositories {
 dependencies {}
 
 java {
-  sourceCompatibility = JavaVersion.toVersion('17')
-  targetCompatibility = JavaVersion.toVersion('17')
+  sourceCompatibility = JavaVersion.toVersion('19')
+  targetCompatibility = JavaVersion.toVersion('19')
 }
 
 shadowJar {
@@ -27,4 +28,30 @@ jar {
   manifest {
     attributes 'Main-Class': 'com.machinepublishers.neuraltrader.Main'
   }
+}
+
+graalvmNative {
+  toolchainDetection = false
+  binaries {
+    main {
+      // Main options
+      mainClass = 'com.machinepublishers.neuraltrader.Main'
+      useFatJar = true
+      quickBuild = false
+      richOutput = true
+      buildArgs.add('--enable-preview')
+    }
+  }
+}
+
+tasks.withType(JavaCompile) {
+  options.compilerArgs += "--enable-preview"
+}
+
+tasks.withType(Test) {
+  jvmArgs += "--enable-preview"
+}
+
+tasks.withType(JavaExec) {
+  jvmArgs += '--enable-preview'
 }
