@@ -1,11 +1,12 @@
 package com.machinepublishers.neuraltrader;
 
 import java.io.File;
+import java.io.Serializable;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Random;
 
-public class NeuralNet {
+public class NeuralNet implements Serializable {
 
   private static final Random rand = new SecureRandom();
   private static final File DATA = new File("./data");

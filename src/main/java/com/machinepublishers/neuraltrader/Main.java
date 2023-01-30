@@ -1,5 +1,10 @@
 package com.machinepublishers.neuraltrader;
 
+import java.rmi.NotBoundException;
+import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
+import java.rmi.server.UnicastRemoteObject;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Random;
@@ -7,9 +12,11 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 
 public class Main {
 
-  public static final int NETS = 3;
-  private static final int GROUPS = 3;
+  private static final String SERVER = System.getProperty("server");
   private static final int GROUP = Integer.parseInt(System.getProperty("group"));
+  
+  private static final int NETS = 3;
+  private static final int GROUPS = 3;
   private static final int TRIES = 32;
   private static final int CHANCE = 80_000;
   private static final double MARGIN = .04d;
@@ -26,6 +33,15 @@ public class Main {
   private static final NeuralNet[][] evalNetsExt = new NeuralNet[NETS][EVAL_CHILDREN + 3];
   private static final int[][] firstPlaceFinishes = new int[NETS][evalNetsExt[0].length];
   private static final int[][] curProfits = new int[NETS][evalNetsExt[0].length];
+  private static final Server server;
+
+  static {
+    if (SERVER == null || SERVER.isBlank()) {
+      server = startServer();
+    } else {
+      server = getServer(SERVER);
+    }
+  }
 
   public static void main(String[] args) {
     for (int n = 0; n < NETS * GROUPS; n++) {
@@ -51,6 +67,27 @@ public class Main {
     }
     startTestLogs();
     startAutoSave();
+  }
+
+  private static Server startServer() {
+    try {
+      Registry registry = LocateRegistry.createRegistry(18384);
+      Server server = new ServerImpl();
+      Server stub = (Server) UnicastRemoteObject.exportObject(server, 18384);
+      registry.rebind(Server.class.getSimpleName(), stub);
+      return server;
+    } catch (RemoteException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private static Server getServer(String serverHost) {
+    try {
+      Registry registry = LocateRegistry.getRegistry(serverHost, 18384);
+      return (Server) registry.lookup(Server.class.getSimpleName());
+    } catch (RemoteException | NotBoundException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   private static void startEval(NeuralNet net, int index) {
@@ -138,8 +175,15 @@ public class Main {
     new Thread(() -> {
       while (true) {
         for (int n = 0; n < NETS; n++) {
-          nets.get(n).save();
-          prevNets.get(n).savePrev();
+          NeuralNet cur = nets.get(n);
+          NeuralNet prev = prevNets.get(n);
+          cur.save();
+          prev.savePrev();
+          try {
+            server.upload(getKey(), cur, prev);
+          } catch (RemoteException e) {
+            e.printStackTrace();
+          }
         }
         try {
           Thread.sleep(10 * 60 * 1000);
@@ -176,7 +220,12 @@ public class Main {
     int randItem = rand.nextInt(NETS);
     int randGroup = rand.nextInt(GROUPS - 1);
     randGroup += randGroup < GROUP ? 0 : 1;
-    return NeuralNet.create(randGroup * NETS + randItem, GROUP * NETS + index);
+    try {
+      return server.download(getKey(), randGroup * NETS + randItem, GROUP * NETS + index);
+    } catch (RemoteException e) {
+      e.printStackTrace();
+      return randOther(index, true);
+    }
   }
 
   private static int randTime(int[] data) {
@@ -261,5 +310,9 @@ public class Main {
       return data[(offset + buyTime - WINDOW - 1) * 2] - data[buyOffset];
     }
     return 0;
+  }
+
+  public static String getKey() {
+    return "v1^1k?UV(8R,4.a92IsnH6g";
   }
 }
