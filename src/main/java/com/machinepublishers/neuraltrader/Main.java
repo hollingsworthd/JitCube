@@ -12,11 +12,15 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 
 public class Main {
 
+  private static final boolean SERVE = Boolean.parseBoolean(System.getProperty("serve"));
   private static final String SERVER = System.getProperty("server");
   private static final int GROUP = Integer.parseInt(System.getProperty("group"));
   private static final int NETS = Integer.parseInt(System.getProperty("nets"));
   private static final int GROUPS = Integer.parseInt(System.getProperty("groups"));
   private static final long INTERVAL = 1000L * Integer.parseInt(System.getProperty("interval"));
+  static{
+    System.setProperty( "java.rmi.server.hostname", SERVER ) ;
+  }
 
   private static final int TRIES = 32;
   private static final int CHANCE = 80_000;
@@ -37,7 +41,7 @@ public class Main {
   private static final Server server;
 
   static {
-    if (SERVER == null || SERVER.isBlank()) {
+    if (SERVE) {
       server = startServer();
     } else {
       server = getServer(SERVER);
