@@ -14,9 +14,10 @@ public class Main {
 
   private static final String SERVER = System.getProperty("server");
   private static final int GROUP = Integer.parseInt(System.getProperty("group"));
-  
-  private static final int NETS = 3;
-  private static final int GROUPS = 3;
+  private static final int NETS = Integer.parseInt(System.getProperty("nets"));
+  private static final int GROUPS = Integer.parseInt(System.getProperty("groups"));
+  private static final long INTERVAL = 1000L * Integer.parseInt(System.getProperty("interval"));
+
   private static final int TRIES = 32;
   private static final int CHANCE = 80_000;
   private static final double MARGIN = .04d;
@@ -163,7 +164,7 @@ public class Main {
         Log.info("========================================");
         try {
           long now = System.currentTimeMillis();
-          Thread.sleep(4000 - (now % 4000));
+          Thread.sleep(INTERVAL - (now % INTERVAL));
         } catch (InterruptedException e) {
           throw new RuntimeException(e);
         }

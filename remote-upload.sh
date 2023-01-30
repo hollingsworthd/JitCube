@@ -1,0 +1,10 @@
+scp build/libs/neural-trader.jar root@143.198.113.241:~/
+scp build/libs/neural-trader.jar root@147.182.137.12:~/
+scp build/libs/neural-trader.jar root@143.198.113.236:~/
+scp build/libs/neural-trader.jar root@159.203.176.177:~/
+scp build/libs/neural-trader.jar root@147.182.137.44:~/
+scp build/libs/neural-trader.jar root@162.243.169.109:~/
+scp build/libs/neural-trader.jar root@159.223.172.68:~/
+scp build/libs/neural-trader.jar root@159.223.170.59:~/
+scp build/libs/neural-trader.jar root@147.182.137.61:~/
+scp build/libs/neural-trader.jar root@143.198.126.64:~/

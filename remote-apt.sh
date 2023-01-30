@@ -1,0 +1,11 @@
+COMMAND='sudo apt-get update && sudo apt-get install -y openjdk-17-jre-headless unzip'
+ssh root@143.198.113.241 "${COMMAND}"
+ssh root@147.182.137.12 "${COMMAND}"
+ssh root@143.198.113.236 "${COMMAND}"
+ssh root@159.203.176.177 "${COMMAND}"
+ssh root@147.182.137.44 "${COMMAND}"
+ssh root@162.243.169.109 "${COMMAND}"
+ssh root@159.223.172.68 "${COMMAND}"
+ssh root@159.223.170.59 "${COMMAND}"
+ssh root@147.182.137.61 "${COMMAND}"
+ssh root@143.198.126.64 "${COMMAND}"
