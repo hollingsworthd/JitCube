@@ -5,10 +5,9 @@ import java.rmi.RemoteException;
 public class ServerImpl implements Server {
 
   @Override
-  public void upload(String key, NeuralNet cur, NeuralNet prev) throws RemoteException {
+  public void upload(String key, NeuralNet cur) throws RemoteException {
     if (Main.getKey().equals(key)) {
       cur.save();
-      prev.savePrev();
     }
   }
 

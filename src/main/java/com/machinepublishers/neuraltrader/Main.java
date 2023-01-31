@@ -42,11 +42,18 @@ public class Main {
   private static final Server server;
 
   static {
-    if (SERVE) {
-      server = startServer();
-    } else {
-      server = getServer(SERVER);
+    Server serverTmp;
+    try {
+      if (SERVE) {
+        serverTmp = startServer();
+      } else {
+        serverTmp = getServer(SERVER);
+      }
+    } catch (RemoteException | NotBoundException e) {
+      e.printStackTrace();
+      serverTmp = null;
     }
+    server = serverTmp;
   }
 
   public static void main(String[] args) {
@@ -75,25 +82,17 @@ public class Main {
     startAutoSave();
   }
 
-  private static Server startServer() {
-    try {
-      Registry registry = LocateRegistry.createRegistry(18384);
-      Server server = new ServerImpl();
-      Server stub = (Server) UnicastRemoteObject.exportObject(server, 18384);
-      registry.rebind(Server.class.getSimpleName(), stub);
-      return server;
-    } catch (RemoteException e) {
-      throw new RuntimeException(e);
-    }
+  private static Server startServer() throws RemoteException {
+    Registry registry = LocateRegistry.createRegistry(18384);
+    Server server = new ServerImpl();
+    Server stub = (Server) UnicastRemoteObject.exportObject(server, 18384);
+    registry.rebind(Server.class.getSimpleName(), stub);
+    return server;
   }
 
-  private static Server getServer(String serverHost) {
-    try {
-      Registry registry = LocateRegistry.getRegistry(serverHost, 18384);
-      return (Server) registry.lookup(Server.class.getSimpleName());
-    } catch (RemoteException | NotBoundException e) {
-      throw new RuntimeException(e);
-    }
+  private static Server getServer(String serverHost) throws RemoteException, NotBoundException {
+    Registry registry = LocateRegistry.getRegistry(serverHost, 18384);
+    return (Server) registry.lookup(Server.class.getSimpleName());
   }
 
   private static void startEval(NeuralNet net, int index) {
@@ -185,10 +184,12 @@ public class Main {
           NeuralNet prev = prevNets.get(n);
           cur.save();
           prev.savePrev();
-          try {
-            server.upload(getKey(), cur, prev);
-          } catch (RemoteException e) {
-            e.printStackTrace();
+          if (server != null) {
+            try {
+              server.upload(getKey(), cur);
+            } catch (RemoteException e) {
+              e.printStackTrace();
+            }
           }
         }
         try {
@@ -226,12 +227,14 @@ public class Main {
     int randItem = rand.nextInt(NETS);
     int randGroup = rand.nextInt(GROUPS - 1);
     randGroup += randGroup < GROUP ? 0 : 1;
-    try {
-      return server.download(getKey(), randGroup * NETS + randItem, GROUP * NETS + index);
-    } catch (RemoteException e) {
-      e.printStackTrace();
-      return randOther(index, true);
+    if (server != null) {
+      try {
+        return server.download(getKey(), randGroup * NETS + randItem, GROUP * NETS + index);
+      } catch (RemoteException e) {
+        e.printStackTrace();
+      }
     }
+    return randOther(index, true);
   }
 
   private static int randTime(int[] data) {
