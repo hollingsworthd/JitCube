@@ -1,1 +1,1 @@
-java -Dserver=143.198.113.241 -Dgroup=0 -Dnets=3 -Dgroups=13 -Dinterval=4 -jar build/libs/neural-trader.jar
+java -Dserver=127.0.0.1 -Dserve=true -Dgroup=0 -Dnets=3 -Dgroups=3 -Dinterval=4 -jar build/libs/neural-trader.jar

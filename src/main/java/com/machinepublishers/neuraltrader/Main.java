@@ -37,7 +37,6 @@ public class Main {
   private static final AtomicReferenceArray<NeuralNet> prevNets = new AtomicReferenceArray<>(NETS);
   private static final NeuralNet[][] evalNets = new NeuralNet[NETS][EVAL_CHILDREN + 2];
   private static final NeuralNet[][] evalNetsExt = new NeuralNet[NETS][EVAL_CHILDREN + 3];
-  private static final int[][] firstPlaceFinishes = new int[NETS][evalNetsExt[0].length];
   private static final int[][] curProfits = new int[NETS][evalNetsExt[0].length];
   private static final Server server;
 
@@ -266,46 +265,34 @@ public class Main {
 
   private static NeuralNet evalScaled(NeuralNet[] nets, int index) {
     Arrays.fill(curProfits[index], 0);
-    Arrays.fill(firstPlaceFinishes[index], 0);
     for (int i = 0; i < TRIES; i++) {
       int[] data = prices.getData(true);
       int offset = randTime(data);
-      int bestProfit = Integer.MIN_VALUE;
       for (int n = 0; n < nets.length; n++) {
-        int profit = profit(nets[n], data, offset);
-        curProfits[index][n] = profit;
-        if (profit > bestProfit) {
-          bestProfit = profit;
-        }
-      }
-      for (int n = 0; n < nets.length; n++) {
-        if (curProfits[index][n] == bestProfit) {
-          ++firstPlaceFinishes[index][n];
-        }
+        curProfits[index][n] += profit(nets[n], data, offset);
       }
     }
-    int bestPlace = Integer.MIN_VALUE;
+    int best = Integer.MIN_VALUE;
+    int bestIndex = -1;
     for (int n = 0; n < nets.length; n++) {
-      if (firstPlaceFinishes[index][n] > bestPlace) {
-        bestPlace = firstPlaceFinishes[index][n];
+      if (curProfits[index][n] >= best) {
+        best = curProfits[index][n];
+        bestIndex = n;
       }
     }
-    for (int n = nets.length - 1; n > -1; n--) {
-      if (firstPlaceFinishes[index][n] == bestPlace) {
-        return nets[n];
-      }
-    }
-    return nets[0];
+    return nets[bestIndex];
   }
 
   private static int profit(NeuralNet net, int[] data, int offset) {
     int buyTime = -1;
     int buyOffset = -1;
+    double shares = 0d;
     for (int t = WINDOW * 2; t > WINDOW; t--) {
       int cur = (offset + t - 1) * 2;
       if (Decision.BUY == net.decide(data, cur)) {
         buyTime = t;
         buyOffset = cur;
+        shares = 1000d / (double) data[buyOffset];
         break;
       }
     }
@@ -313,10 +300,11 @@ public class Main {
       for (int t = buyTime - 1; t > buyTime - 1 - WINDOW; t--) {
         int cur = (offset + t - 1) * 2;
         if (Decision.SELL == net.decide(data, cur)) {
-          return data[cur] - data[buyOffset];
+          return (int) Math.rint(shares * data[cur] - shares * data[buyOffset]);
         }
       }
-      return data[(offset + buyTime - WINDOW - 1) * 2] - data[buyOffset];
+      return (int) Math.rint(
+          shares * data[(offset + buyTime - WINDOW - 1) * 2] - shares * data[buyOffset]);
     }
     return 0;
   }
