@@ -19,8 +19,8 @@ public class Main {
   private static final int GROUPS = Integer.parseInt(System.getProperty("groups"));
   private static final long INTERVAL = 1000L * Integer.parseInt(System.getProperty("interval"));
   private static final int TRIES = 32;
-  private static final int CHANCE = 60_000;
-  private static final double MARGIN = .03d;
+  private static final int CHANCE = 80_000;
+  private static final float MARGIN = .04f;
   private static final int PRICE_HISTORY = 24 * 60;
   private static final int WINDOW = 30;
   private static final int BUFFER_LEN = 2 * (PRICE_HISTORY + WINDOW * 2);
@@ -68,6 +68,15 @@ public class Main {
         nets.get(n).save();
         prevNets.get(n).savePrev();
       }
+      if (server != null) {
+        for (int n = 0; n < NETS; n++) {
+          try {
+            server.upload(getKey(), nets.get(n), prevNets.get(n));
+          } catch (RemoteException e) {
+            e.printStackTrace();
+          }
+        }
+      }
       Log.info("\nSaved.");
     }));
 
@@ -108,35 +117,15 @@ public class Main {
     new Thread(() -> {
       int[] profitHistory = new int[30];
       int[][] profitHistoryDetail = new int[NETS][30];
-      double[] scaleHistory = new double[30];
       for (long x = 0; x < Long.MAX_VALUE; x++) {
         int[] data = prices.getData(false);
         int offset = randTime(data);
-        double maxProfit = Integer.MIN_VALUE;
-        double maxLoss = 0;
-        for (int i = 0; i < WINDOW * 2 - 1; i++) {
-          int sell = data[2 * (i + offset)];
-          for (int start = Math.max(WINDOW, i + 1), j = start;
-              j < WINDOW * 2 && j - start <= WINDOW; j++) {
-            int buy = data[2 * (j + offset)];
-            maxProfit = Math.max(maxProfit, sell - buy);
-            maxLoss = Math.min(maxLoss, sell - buy);
-          }
-        }
-        int scale = (int) Math.rint(maxProfit - maxLoss);
-        int center = (int) Math.rint(maxLoss);
-        maxProfit /= 100d;
-        maxLoss /= 100d;
-        Log.info("========================================");
-        Log.info("===== $%.2f : %.2f ", maxProfit, maxLoss);
-        Log.info("========================================");
         int totalProfit = 0;
-        int totalScale = 0;
+        Log.info("========================================");
         for (int n = 0; n < NETS; n++) {
           NeuralNet net = nets.get(n);
           int profit = profit(net, data, offset);
           totalProfit += profit;
-          totalScale += profit - center;
           profitHistoryDetail[n][(int) (x % profitHistoryDetail[n].length)] = profit;
           int detailTotal = 0;
           for (int i = 0; i < profitHistoryDetail[n].length; i++) {
@@ -145,21 +134,12 @@ public class Main {
           Log.info("=> N%02d: %.2f (%.2f)", GROUP * NETS + n, profit / 100d, detailTotal / 100d);
         }
         profitHistory[(int) (x % profitHistory.length)] = totalProfit;
-        scaleHistory[(int) (x % scaleHistory.length)] = Math.min(1,
-            Math.max(0, (double) totalScale / (double) (scale * NETS)));
         int allTimeProfit = 0;
         for (int i = 0; i < profitHistory.length; i++) {
           allTimeProfit += profitHistory[i];
         }
-        double allTimeScale = 0;
-        for (int i = 0; i < scaleHistory.length; i++) {
-          allTimeScale += scaleHistory[i];
-        }
-        allTimeScale = Math.max(0, allTimeScale);
-        allTimeScale = Math.min(100,
-            Math.max(0, allTimeScale / Math.min(x + 1, scaleHistory.length) * 100));
         Log.info("========================================");
-        Log.info("===== %s %.3f%% ($%.2f)", allTimeProfit > 0 ? "WINNING" : "LOSING", allTimeScale,
+        Log.info("===== %s $%.2f", allTimeProfit > 0 ? "WINNING" : "LOSING",
             Math.abs(allTimeProfit / 100d));
         Log.info("========================================");
         try {
@@ -178,11 +158,9 @@ public class Main {
         for (int n = 0; n < NETS; n++) {
           NeuralNet cur = nets.get(n);
           NeuralNet prev = prevNets.get(n);
-          cur.save();
-          prev.savePrev();
           if (server != null) {
             try {
-              server.upload(getKey(), cur);
+              server.upload(getKey(), cur, prev);
             } catch (RemoteException e) {
               e.printStackTrace();
             }
@@ -284,7 +262,7 @@ public class Main {
       if (Decision.BUY == net.decide(data, cur)) {
         buyTime = t;
         buyOffset = cur;
-        shares = 100_000d / (double) data[buyOffset];
+        shares = 100_000d / (float) data[buyOffset];
         break;
       }
     }

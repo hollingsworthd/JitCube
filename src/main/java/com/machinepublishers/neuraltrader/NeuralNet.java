@@ -19,10 +19,10 @@ public class NeuralNet implements Serializable {
   private final int id;
   private final File file;
   private final File prev;
-  private final double[][][] weights;
-  private final double[][] thresholds;
+  private final float[][][] weights;
+  private final float[][] thresholds;
 
-  private NeuralNet(int id, File saveTo, double[][][] weights, double[][] thresholds) {
+  private NeuralNet(int id, File saveTo, float[][][] weights, float[][] thresholds) {
     this.id = id;
     this.file = saveTo;
     this.prev = initPrev(saveTo);
@@ -36,8 +36,8 @@ public class NeuralNet implements Serializable {
     this.file = saveTo;
     this.prev = initPrev(saveTo);
     layers += 1;
-    this.weights = initWeights(layers, len, inputLen);
-    this.thresholds = initThresholds(layers, len);
+    this.weights = mutate(initWeights(layers, len, inputLen), 1f, 1_000_000);
+    this.thresholds = mutate(initThresholds(layers, len), 1f, 1_000_000);
     this.buffer = new boolean[this.weights[0].length];
   }
 
@@ -52,21 +52,21 @@ public class NeuralNet implements Serializable {
     int len = Integer.parseInt(dimensions[1]);
     int inputLen = Integer.parseInt(dimensions[2]);
 
-    double[][][] weights = initWeights(layers, len, inputLen);
-    double[][] thresholds = initThresholds(layers, len);
+    float[][][] weights = initWeights(layers, len, inputLen);
+    float[][] thresholds = initThresholds(layers, len);
     String[] weightTokens = lines[1].split(",");
     String[] thresholdTokens = lines[2].split(",");
 
     for (int i = 0, token = 0; i < weights.length; i++) {
       for (int j = 0; j < weights[i].length; j++) {
         for (int k = 0; k < weights[i][j].length; k++) {
-          weights[i][j][k] = Double.parseDouble(weightTokens[token++]);
+          weights[i][j][k] = Float.parseFloat(weightTokens[token++]);
         }
       }
     }
     for (int i = 0, token = 0; i < thresholds.length; i++) {
       for (int j = 0; j < thresholds[i].length; j++) {
-        thresholds[i][j] = Double.parseDouble(thresholdTokens[token++]);
+        thresholds[i][j] = Float.parseFloat(thresholdTokens[token++]);
       }
     }
     this.weights = weights;
@@ -93,32 +93,32 @@ public class NeuralNet implements Serializable {
     return new File(DATA, file.getName() + ".prev");
   }
 
-  private static double[][][] initWeights(int layers, int len, int inputLen) {
-    double[][][] weights = new double[layers][][];
-    weights[layers - 1] = new double[2][len];
+  private static float[][][] initWeights(int layers, int len, int inputLen) {
+    float[][][] weights = new float[layers][][];
+    weights[layers - 1] = new float[2][len];
 
     for (int i = 0; i < layers - 1; i++) {
-      weights[i] = new double[len][];
+      weights[i] = new float[len][];
       for (int j = 0; j < len; j++) {
-        weights[i][j] = new double[i == 0 ? inputLen : len];
+        weights[i][j] = new float[i == 0 ? inputLen : len];
       }
     }
     return weights;
   }
 
-  private static double[][] initThresholds(int layers, int len) {
-    double[][] thresholds = new double[layers][];
-    thresholds[layers - 1] = new double[2];
+  private static float[][] initThresholds(int layers, int len) {
+    float[][] thresholds = new float[layers][];
+    thresholds[layers - 1] = new float[2];
     for (int i = 0; i < layers - 1; i++) {
-      thresholds[i] = new double[len];
+      thresholds[i] = new float[len];
     }
     return thresholds;
   }
 
-  private static double[][][] copy(double[][][] array) {
-    double[][][] copy = new double[array.length][][];
+  private static float[][][] copy(float[][][] array) {
+    float[][][] copy = new float[array.length][][];
     for (int i = 0; i < array.length; i++) {
-      copy[i] = new double[array[i].length][];
+      copy[i] = new float[array[i].length][];
       for (int j = 0; j < array[i].length; j++) {
         copy[i][j] = Arrays.copyOf(array[i][j], array[i][j].length);
       }
@@ -126,15 +126,15 @@ public class NeuralNet implements Serializable {
     return copy;
   }
 
-  private static double[][] copy(double[][] array) {
-    double[][] copy = new double[array.length][];
+  private static float[][] copy(float[][] array) {
+    float[][] copy = new float[array.length][];
     for (int i = 0; i < array.length; i++) {
       copy[i] = Arrays.copyOf(array[i], array[i].length);
     }
     return copy;
   }
 
-  private static double[][][] merge(int mergesPercent, double[][][] array1, double[][][] array2) {
+  private static float[][][] merge(int mergesPercent, float[][][] array1, float[][][] array2) {
     for (int i = 0; i < array1.length; i++) {
       for (int j = 0; j < array1[i].length; j++) {
         for (int k = 0; k < array1[i][j].length; k++) {
@@ -147,7 +147,7 @@ public class NeuralNet implements Serializable {
     return array1;
   }
 
-  private static double[][] merge(int mergesPercent, double[][] array1, double[][] array2) {
+  private static float[][] merge(int mergesPercent, float[][] array1, float[][] array2) {
     for (int i = 0; i < array1.length; i++) {
       for (int j = 0; j < array1[i].length; j++) {
         if (rand.nextInt(100) < mergesPercent) {
@@ -158,16 +158,16 @@ public class NeuralNet implements Serializable {
     return array1;
   }
 
-  private static double[][][] mutate(double[][][] weights, double margin, int mutationsPerMillion) {
+  private static float[][][] mutate(float[][][] weights, float margin, int mutationsPerMillion) {
     if (mutationsPerMillion > 0) {
       for (int i = 0; i < weights.length; i++) {
         for (int j = 0; j < weights[i].length; j++) {
           for (int k = 0; k < weights[i][j].length; k++) {
             if (rand.nextInt(1_000_000) < mutationsPerMillion) {
-              double sign = rand.nextBoolean() ? 1d : -1d;
-              double newVal = sign * rand.nextDouble(0, margin) + weights[i][j][k];
-              newVal = newVal > 1d ? 1d : newVal;
-              newVal = newVal < -1d ? -1d : newVal;
+              float sign = rand.nextBoolean() ? 1f : -1f;
+              float newVal = sign * rand.nextFloat(0, margin) + weights[i][j][k];
+              newVal = newVal > 1f ? 1f : newVal;
+              newVal = newVal < -1f ? -1f : newVal;
               weights[i][j][k] = newVal;
             }
           }
@@ -177,15 +177,15 @@ public class NeuralNet implements Serializable {
     return weights;
   }
 
-  private static double[][] mutate(double[][] thresholds, double margin, int mutationsPerMillion) {
+  private static float[][] mutate(float[][] thresholds, float margin, int mutationsPerMillion) {
     if (mutationsPerMillion > 0) {
       for (int i = 0; i < thresholds.length; i++) {
         for (int j = 0; j < thresholds[i].length; j++) {
           if (rand.nextInt(1_000_000) < mutationsPerMillion) {
-            double sign = rand.nextBoolean() ? 1d : -1d;
-            double newVal = sign * rand.nextDouble(0, margin) + thresholds[i][j];
-            newVal = newVal > 1d ? 1d : newVal;
-            newVal = newVal < -1d ? -1d : newVal;
+            float sign = rand.nextBoolean() ? 1f : -1f;
+            float newVal = sign * rand.nextFloat(0, margin) + thresholds[i][j];
+            newVal = newVal > 1f ? 1f : newVal;
+            newVal = newVal < -1f ? -1f : newVal;
             thresholds[i][j] = newVal;
           }
         }
@@ -198,12 +198,12 @@ public class NeuralNet implements Serializable {
     return new NeuralNet(newId, new File(DATA, "n" + newId), weights, thresholds);
   }
 
-  public NeuralNet mutate(double margin, int mutationsPerMillion) {
+  public NeuralNet mutate(float margin, int mutationsPerMillion) {
     return new NeuralNet(id, file, mutate(copy(weights), margin, mutationsPerMillion),
         mutate(copy(thresholds), margin, mutationsPerMillion));
   }
 
-  public NeuralNet mergeAndMutate(NeuralNet other, int mergesPercent, double margin,
+  public NeuralNet mergeAndMutate(NeuralNet other, int mergesPercent, float margin,
       int mutationsPerMillion) {
     return new NeuralNet(id, file,
         mutate(merge(mergesPercent, copy(weights), other.weights), margin, mutationsPerMillion),
