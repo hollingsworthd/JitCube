@@ -18,27 +18,24 @@ public class Main {
   private static final int NETS = Integer.parseInt(System.getProperty("nets"));
   private static final int GROUPS = Integer.parseInt(System.getProperty("groups"));
   private static final long INTERVAL = 1000L * Integer.parseInt(System.getProperty("interval"));
-
-  static {
-    System.setProperty("java.rmi.server.hostname", SERVER);
-  }
-
   private static final int TRIES = 32;
   private static final int CHANCE = 60_000;
   private static final double MARGIN = .03d;
   private static final int PRICE_HISTORY = 24 * 60;
   private static final int WINDOW = 30;
   private static final int BUFFER_LEN = 2 * (PRICE_HISTORY + WINDOW * 2);
-  private static final int EVAL_CHILDREN = 61;
-
+  private static final int EVAL_CHILDREN = 1;
   private static final Prices prices = new Prices();
   private static final Random rand = new SecureRandom();
   private static final AtomicReferenceArray<NeuralNet> nets = new AtomicReferenceArray<>(NETS);
   private static final AtomicReferenceArray<NeuralNet> prevNets = new AtomicReferenceArray<>(NETS);
-  private static final NeuralNet[][] evalNets = new NeuralNet[NETS][EVAL_CHILDREN + 2];
-  private static final NeuralNet[][] evalNetsExt = new NeuralNet[NETS][EVAL_CHILDREN + 3];
-  private static final int[][] curProfits = new int[NETS][evalNetsExt[0].length];
+  private static final NeuralNet[][] evalNets = new NeuralNet[NETS][EVAL_CHILDREN + 3];
+  private static final int[][] curProfits = new int[NETS][evalNets[0].length];
   private static final Server server;
+
+  static {
+    System.setProperty("java.rmi.server.hostname", SERVER);
+  }
 
   static {
     Server serverTmp;
@@ -75,7 +72,7 @@ public class Main {
     }));
 
     for (int n = 0; n < NETS; n++) {
-      startEval(getNet(n), n);
+      startEval(nets.get(n), n);
     }
     startTestLogs();
     startAutoSave();
@@ -136,7 +133,7 @@ public class Main {
         int totalProfit = 0;
         int totalScale = 0;
         for (int n = 0; n < NETS; n++) {
-          NeuralNet net = getNet(n);
+          NeuralNet net = nets.get(n);
           int profit = profit(net, data, offset);
           totalProfit += profit;
           totalScale += profit - center;
@@ -192,16 +189,12 @@ public class Main {
           }
         }
         try {
-          Thread.sleep(10 * 60 * 1000);
+          Thread.sleep(1 * 60 * 1000);
         } catch (InterruptedException e) {
           throw new RuntimeException(e);
         }
       }
     }).start();
-  }
-
-  private static NeuralNet getNet(int index) {
-    return nets.get(index);
   }
 
   private static NeuralNet initNet(int index) {
@@ -211,10 +204,6 @@ public class Main {
   private static NeuralNet save(NeuralNet next, int index) {
     prevNets.set(index, nets.getAndSet(index, next));
     return next;
-  }
-
-  private static NeuralNet prev(int index) {
-    return prevNets.get(index);
   }
 
   private static NeuralNet randOther(int index, boolean sameGroup) {
@@ -242,13 +231,13 @@ public class Main {
 
   private static NeuralNet eval(NeuralNet orig, int index) {
     int factor = (GROUP + 2) / 2;
-    NeuralNet prev = prev(index);
-    NeuralNet[] nets = prev == orig ? evalNets[index] : evalNetsExt[index];
-    int i = 0;
     NeuralNet sibling = randOther(index, true);
-    if (rand.nextInt(300) == 0) {
+    NeuralNet prev = prevNets.get(index);
+    NeuralNet[] nets = evalNets[index];
+    int i = 0;
+    if (rand.nextInt(3000) == 0) {
       nets[i++] = randOther(index, false);
-    } else if (rand.nextInt(10) == 0) {
+    } else if (rand.nextInt(100) == 0) {
       nets[i++] = sibling.clone(GROUP * NETS + index);
     } else {
       nets[i++] = orig.mutate(factor * MARGIN, factor * CHANCE);
@@ -256,8 +245,11 @@ public class Main {
     for (int x = 0; x < EVAL_CHILDREN; x++) {
       nets[i++] = orig.mergeAndMutate(sibling, 25, factor * MARGIN, factor * CHANCE);
     }
-    nets[i++] = orig;
-    if (prev != orig) {
+    if (prev == orig) {
+      nets[i++] = orig.mergeAndMutate(sibling, 25, factor * MARGIN, factor * CHANCE);
+      nets[i] = orig;
+    } else {
+      nets[i++] = orig;
       nets[i] = prev;
     }
     return evalScaled(nets, index);
@@ -292,7 +284,7 @@ public class Main {
       if (Decision.BUY == net.decide(data, cur)) {
         buyTime = t;
         buyOffset = cur;
-        shares = 1000d / (double) data[buyOffset];
+        shares = 100_000d / (double) data[buyOffset];
         break;
       }
     }

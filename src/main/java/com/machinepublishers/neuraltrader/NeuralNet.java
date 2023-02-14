@@ -100,7 +100,7 @@ public class NeuralNet implements Serializable {
     for (int i = 0; i < layers - 1; i++) {
       weights[i] = new double[len][];
       for (int j = 0; j < len; j++) {
-        weights[i][j] = new double[i == 0 && j == 0 ? inputLen : len];
+        weights[i][j] = new double[i == 0 ? inputLen : len];
       }
     }
     return weights;
@@ -240,14 +240,14 @@ public class NeuralNet implements Serializable {
       for (int j = 0; j < weights[i].length; j++) {
         double sum = 0d;
         for (int k = 0; k < weights[i][j].length; k++) {
-          if (j != 0 || i != 0) {
-            if (buffer[k]) {
-              sum += weights[i][j][k];
+          if (i == 0) {
+            if (k % 2 == 0) {
+              sum += weights[i][j][k] * (input[k + offset] - minPrice) / scalePrice;
+            } else {
+              sum += weights[i][j][k] * (input[k + offset] - minVolume) / scaleVolume;
             }
-          } else if (k % 2 == 0) {
-            sum += weights[i][j][k] * (input[k + offset] - minPrice) / scalePrice;
-          } else {
-            sum += weights[i][j][k] * (input[k + offset] - minVolume) / scaleVolume;
+          } else if (buffer[k]) {
+            sum += weights[i][j][k];
           }
         }
         buffer[j] = sum > thresholds[i][j];
