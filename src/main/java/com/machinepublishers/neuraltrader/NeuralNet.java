@@ -15,7 +15,8 @@ public class NeuralNet implements Serializable {
     DATA.mkdirs();
   }
 
-  private final boolean[] buffer;
+  private final double[] buffer1;
+  private final double[] buffer2;
   private final int id;
   private final File file;
   private final File prev;
@@ -28,7 +29,8 @@ public class NeuralNet implements Serializable {
     this.prev = initPrev(saveTo);
     this.weights = weights;
     this.thresholds = thresholds;
-    this.buffer = new boolean[this.weights[0].length];
+    this.buffer1 = new double[this.weights[0].length];
+    this.buffer2 = new double[this.weights[0].length];
   }
 
   private NeuralNet(int id, File saveTo, int layers, int len, int inputLen) {
@@ -38,7 +40,8 @@ public class NeuralNet implements Serializable {
     layers += 1;
     this.weights = mutate(initWeights(layers, len, inputLen), 1f, 1_000_000);
     this.thresholds = mutate(initThresholds(layers, len), 1f, 1_000_000);
-    this.buffer = new boolean[this.weights[0].length];
+    this.buffer1 = new double[this.weights[0].length];
+    this.buffer2 = new double[this.weights[0].length];
   }
 
   private NeuralNet(int id, File readFrom, File saveTo) {
@@ -71,7 +74,8 @@ public class NeuralNet implements Serializable {
     }
     this.weights = weights;
     this.thresholds = thresholds;
-    this.buffer = new boolean[this.weights[0].length];
+    this.buffer1 = new double[this.weights[0].length];
+    this.buffer2 = new double[this.weights[0].length];
   }
 
   public static NeuralNet create(int idFrom, int idTo) {
@@ -212,17 +216,17 @@ public class NeuralNet implements Serializable {
   }
 
   public Decision decide(int[] input, int offset) {
-    processDecision(input, offset);
-    if (buffer[0] && !buffer[1]) {
+    double[] buffer = processDecision(input, offset);
+    if (buffer[0] > 0d && buffer[1] <= 0d) {
       return Decision.BUY;
     }
-    if (!buffer[0] && buffer[1]) {
+    if (buffer[0] <= 0d && buffer[1] > 0d) {
       return Decision.SELL;
     }
     return Decision.HOLD;
   }
 
-  private void processDecision(int[] input, int offset) {
+  private double[] processDecision(int[] input, int offset) {
     int maxPrice = Integer.MIN_VALUE;
     int minPrice = Integer.MAX_VALUE;
     int maxVolume = Integer.MIN_VALUE;
@@ -236,6 +240,8 @@ public class NeuralNet implements Serializable {
     }
     double scalePrice = maxPrice - minPrice;
     double scaleVolume = maxVolume - minVolume;
+    double[] prev = buffer1;
+    double[] next = buffer2;
     for (int i = 0; i < weights.length; i++) {
       for (int j = 0; j < weights[i].length; j++) {
         double sum = 0d;
@@ -246,13 +252,22 @@ public class NeuralNet implements Serializable {
             } else {
               sum += weights[i][j][k] * (input[k + offset] - minVolume) / scaleVolume;
             }
-          } else if (buffer[k]) {
-            sum += weights[i][j][k];
+          } else {
+            sum += weights[i][j][k] * prev[k];
           }
         }
-        buffer[j] = sum > thresholds[i][j];
+        if ((thresholds[i][j] < 0 && sum < thresholds[i][j]) || (thresholds[i][j] > 0
+            && sum > thresholds[i][j])) {
+          next[j] = (2d / (1d + Math.exp(-2d * sum))) - 1d;
+        } else {
+          next[j] = 0d;
+        }
       }
+      double[] tmp = prev;
+      prev = next;
+      next = tmp;
     }
+    return prev;
   }
 
   @Override

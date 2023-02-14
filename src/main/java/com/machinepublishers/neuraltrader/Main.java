@@ -167,7 +167,7 @@ public class Main {
           }
         }
         try {
-          Thread.sleep(1 * 60 * 1000);
+          Thread.sleep(10 * 60 * 1000);
         } catch (InterruptedException e) {
           throw new RuntimeException(e);
         }
