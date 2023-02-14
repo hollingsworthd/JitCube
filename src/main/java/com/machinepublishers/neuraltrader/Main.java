@@ -21,10 +21,10 @@ public class Main {
   private static final int TRIES = 32;
   private static final int CHANCE = 80_000;
   private static final float MARGIN = .04f;
-  private static final int PRICE_HISTORY = 24 * 60;
+  private static final int PRICE_HISTORY = 6 * 60;
   private static final int WINDOW = 30;
   private static final int BUFFER_LEN = 2 * (PRICE_HISTORY + WINDOW * 2);
-  private static final int EVAL_CHILDREN = 1;
+  private static final int EVAL_CHILDREN = 2;
   private static final Prices prices = new Prices();
   private static final Random rand = new SecureRandom();
   private static final AtomicReferenceArray<NeuralNet> nets = new AtomicReferenceArray<>(NETS);
@@ -176,7 +176,7 @@ public class Main {
   }
 
   private static NeuralNet initNet(int index) {
-    return NeuralNet.create(index, 33, 48, PRICE_HISTORY * 2);
+    return NeuralNet.create(index, 9, 48, PRICE_HISTORY * 2);
   }
 
   private static NeuralNet save(NeuralNet next, int index) {
@@ -213,9 +213,9 @@ public class Main {
     NeuralNet prev = prevNets.get(index);
     NeuralNet[] nets = evalNets[index];
     int i = 0;
-    if (rand.nextInt(3000) == 0) {
+    if (rand.nextInt(7000) == 0) {
       nets[i++] = randOther(index, false);
-    } else if (rand.nextInt(100) == 0) {
+    } else if (rand.nextInt(500) == 0) {
       nets[i++] = sibling.clone(GROUP * NETS + index);
     } else {
       nets[i++] = orig.mutate(factor * MARGIN, factor * CHANCE);
