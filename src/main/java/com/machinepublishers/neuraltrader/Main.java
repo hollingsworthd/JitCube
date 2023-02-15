@@ -8,6 +8,7 @@ import java.rmi.server.UnicastRemoteObject;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
 public class Main {
@@ -21,7 +22,7 @@ public class Main {
   private static final int TRIES = 32;
   private static final int CHANCE = 80_000;
   private static final float MARGIN = .04f;
-  private static final int PRICE_HISTORY = 6 * 60;
+  private static final int PRICE_HISTORY = 12 * 60;
   private static final int WINDOW = 30;
   private static final int BUFFER_LEN = 2 * (PRICE_HISTORY + WINDOW * 2);
   private static final int EVAL_CHILDREN = 2;
@@ -176,7 +177,7 @@ public class Main {
   }
 
   private static NeuralNet initNet(int index) {
-    return NeuralNet.create(index, 9, 48, PRICE_HISTORY * 2);
+    return NeuralNet.create(index, 33, 24, PRICE_HISTORY * 2);
   }
 
   private static NeuralNet save(NeuralNet next, int index) {
