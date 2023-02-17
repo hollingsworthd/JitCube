@@ -11,6 +11,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.Serializable;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -23,13 +24,14 @@ import java.util.stream.Stream;
 public class Prices {
 
   private static final Random rand = new SecureRandom();
-
+  private final int bufferLen;
   private final int[][] training;
   private final int[][] alt;
   private final int[] oddsTraining;
   private final int[] oddsAlt;
 
-  public Prices() {
+  public Prices(int bufferLen) {
+    this.bufferLen = bufferLen;
     new File("./prices/training").mkdirs();
     new File("./prices/alt").mkdirs();
     for (File file : new File("./prices/training").listFiles(
@@ -141,9 +143,20 @@ public class Prices {
     }
   }
 
-  public int[] getData(boolean training) {
+  public Marker rand(boolean training) {
     int[][] data = training ? this.training : this.alt;
     int[] odds = training ? this.oddsTraining : this.oddsAlt;
-    return data[odds[rand.nextInt(odds.length)]];
+    int dataset = odds[rand.nextInt(odds.length)];
+    int offset = rand.nextInt((data[dataset].length - bufferLen) / 2);
+    return new Marker(training, dataset, offset);
+  }
+
+  public int[] getData(Marker marker) {
+    int[][] data = marker.training() ? this.training : this.alt;
+    return data[marker.dataset()];
+  }
+
+  public record Marker(boolean training, int dataset, int offset) implements Serializable {
+
   }
 }

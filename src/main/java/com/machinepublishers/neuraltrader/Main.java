@@ -1,5 +1,6 @@
 package com.machinepublishers.neuraltrader;
 
+import com.machinepublishers.neuraltrader.Prices.Marker;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
@@ -23,9 +24,8 @@ public class Main {
   private static final float MARGIN = .08f;
   private static final int PRICE_HISTORY = 6 * 60;
   private static final int WINDOW = 30;
-  private static final int BUFFER_LEN = 2 * (PRICE_HISTORY + WINDOW * 2);
   private static final int EVAL_CHILDREN = 2;
-  private static final Prices prices = new Prices();
+  private static final Prices prices = new Prices(2 * (PRICE_HISTORY + WINDOW * 2));
   private static final Random rand = new SecureRandom();
   private static final AtomicReferenceArray<NeuralNet> nets = new AtomicReferenceArray<>(NETS);
   private static final AtomicReferenceArray<NeuralNet> prevNets = new AtomicReferenceArray<>(NETS);
@@ -89,7 +89,7 @@ public class Main {
 
   private static Server startServer() throws RemoteException {
     Registry registry = LocateRegistry.createRegistry(18384);
-    Server server = new ServerImpl();
+    Server server = new ServerImpl(prices);
     Server stub = (Server) UnicastRemoteObject.exportObject(server, 18384);
     registry.rebind(Server.class.getSimpleName(), stub);
     return server;
@@ -119,16 +119,29 @@ public class Main {
       final int allTime = 3000;
       int[] profitHistory = new int[allTime];
       int[][] profitHistoryDetail = new int[NETS][allTime];
-
+      Marker marker;
       for (long x = 0; x < Long.MAX_VALUE; x++) {
-        int[] data = prices.getData(false);
-        int offset = randTime(data);
+        try {
+          long now = System.currentTimeMillis();
+          long sleep = INTERVAL - (now % INTERVAL);
+          try {
+            marker = server.randPriceMarker(getKey(), false, sleep + now);
+          } catch (RemoteException e) {
+            e.printStackTrace();
+            marker = prices.rand(false);
+          }
+          Thread.sleep(INTERVAL - (now % INTERVAL));
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        }
+
+        int[] data = prices.getData(marker);
         int totalProfit = 0;
         int cur = (int) (x % profitHistory.length);
         Log.info("========================================");
         for (int n = 0; n < NETS; n++) {
           NeuralNet net = nets.get(n);
-          int profit = profit(net, data, offset);
+          int profit = profit(net, data, marker.offset());
           totalProfit += profit;
           profitHistoryDetail[n][cur] = profit;
           int detailTotal = 0;
@@ -158,12 +171,6 @@ public class Main {
         Log.info("========================================");
         Log.info("===== (%.2f) (%.2f)", profit / 100d, profitRecent / 100d);
         Log.info("========================================");
-        try {
-          long now = System.currentTimeMillis();
-          Thread.sleep(INTERVAL - (now % INTERVAL));
-        } catch (InterruptedException e) {
-          throw new RuntimeException(e);
-        }
       }
     }).start();
   }
@@ -183,7 +190,7 @@ public class Main {
           }
         }
         try {
-          Thread.sleep(1 * 60 * 1000);
+          Thread.sleep(60 * 1000);
         } catch (InterruptedException e) {
           throw new RuntimeException(e);
         }
@@ -219,10 +226,6 @@ public class Main {
     return randOther(index, true);
   }
 
-  private static int randTime(int[] data) {
-    return rand.nextInt((data.length - BUFFER_LEN) / 2);
-  }
-
   private static NeuralNet eval(NeuralNet orig, int index) {
     int factor = GROUP + 1;
     NeuralNet sibling = randOther(index, true);
@@ -252,10 +255,10 @@ public class Main {
   private static NeuralNet evalScaled(NeuralNet[] nets, int index) {
     Arrays.fill(curProfits[index], 0);
     for (int i = 0; i < TRIES; i++) {
-      int[] data = prices.getData(true);
-      int offset = randTime(data);
+      Marker offset = prices.rand(true);
+      int[] data = prices.getData(offset);
       for (int n = 0; n < nets.length; n++) {
-        curProfits[index][n] += profit(nets[n], data, offset);
+        curProfits[index][n] += profit(nets[n], data, offset.offset());
       }
     }
     int best = Integer.MIN_VALUE;
