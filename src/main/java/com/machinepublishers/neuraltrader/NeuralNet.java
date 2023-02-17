@@ -21,14 +21,12 @@ public class NeuralNet implements Serializable {
   private final File file;
   private final File prev;
   private final float[][][] weights;
-  private final float[][] thresholds;
 
-  private NeuralNet(int id, File saveTo, float[][][] weights, float[][] thresholds) {
+  private NeuralNet(int id, File saveTo, float[][][] weights) {
     this.id = id;
     this.file = saveTo;
     this.prev = initPrev(saveTo);
     this.weights = weights;
-    this.thresholds = thresholds;
     this.buffer1 = new double[this.weights[0].length];
     this.buffer2 = new double[this.weights[0].length];
   }
@@ -39,7 +37,6 @@ public class NeuralNet implements Serializable {
     this.prev = initPrev(saveTo);
     layers += 1;
     this.weights = mutate(initWeights(layers, len, inputLen), 1f, 1_000_000);
-    this.thresholds = mutate(initThresholds(layers, len), 1f, 1_000_000);
     this.buffer1 = new double[this.weights[0].length];
     this.buffer2 = new double[this.weights[0].length];
   }
@@ -56,9 +53,7 @@ public class NeuralNet implements Serializable {
     int inputLen = Integer.parseInt(dimensions[2]);
 
     float[][][] weights = initWeights(layers, len, inputLen);
-    float[][] thresholds = initThresholds(layers, len);
     String[] weightTokens = lines[1].split(",");
-    String[] thresholdTokens = lines[2].split(",");
 
     for (int i = 0, token = 0; i < weights.length; i++) {
       for (int j = 0; j < weights[i].length; j++) {
@@ -67,13 +62,7 @@ public class NeuralNet implements Serializable {
         }
       }
     }
-    for (int i = 0, token = 0; i < thresholds.length; i++) {
-      for (int j = 0; j < thresholds[i].length; j++) {
-        thresholds[i][j] = Float.parseFloat(thresholdTokens[token++]);
-      }
-    }
     this.weights = weights;
-    this.thresholds = thresholds;
     this.buffer1 = new double[this.weights[0].length];
     this.buffer2 = new double[this.weights[0].length];
   }
@@ -104,19 +93,10 @@ public class NeuralNet implements Serializable {
     for (int i = 0; i < layers - 1; i++) {
       weights[i] = new float[len][];
       for (int j = 0; j < len; j++) {
-        weights[i][j] = new float[i == 0 ? inputLen : len];
+        weights[i][j] = new float[i == 0 ? inputLen / 2 : (i == 1 ? len / 2 : len)];
       }
     }
     return weights;
-  }
-
-  private static float[][] initThresholds(int layers, int len) {
-    float[][] thresholds = new float[layers][];
-    thresholds[layers - 1] = new float[2];
-    for (int i = 0; i < layers - 1; i++) {
-      thresholds[i] = new float[len];
-    }
-    return thresholds;
   }
 
   private static float[][][] copy(float[][][] array) {
@@ -130,14 +110,6 @@ public class NeuralNet implements Serializable {
     return copy;
   }
 
-  private static float[][] copy(float[][] array) {
-    float[][] copy = new float[array.length][];
-    for (int i = 0; i < array.length; i++) {
-      copy[i] = Arrays.copyOf(array[i], array[i].length);
-    }
-    return copy;
-  }
-
   private static float[][][] merge(int mergesPercent, float[][][] array1, float[][][] array2) {
     for (int i = 0; i < array1.length; i++) {
       for (int j = 0; j < array1[i].length; j++) {
@@ -145,17 +117,6 @@ public class NeuralNet implements Serializable {
           if (rand.nextInt(100) < mergesPercent) {
             array1[i][j][k] = array2[i][j][k];
           }
-        }
-      }
-    }
-    return array1;
-  }
-
-  private static float[][] merge(int mergesPercent, float[][] array1, float[][] array2) {
-    for (int i = 0; i < array1.length; i++) {
-      for (int j = 0; j < array1[i].length; j++) {
-        if (rand.nextInt(100) < mergesPercent) {
-          array1[i][j] = array2[i][j];
         }
       }
     }
@@ -181,38 +142,18 @@ public class NeuralNet implements Serializable {
     return weights;
   }
 
-  private static float[][] mutate(float[][] thresholds, float margin, int mutationsPerMillion) {
-    if (mutationsPerMillion > 0) {
-      for (int i = 0; i < thresholds.length; i++) {
-        for (int j = 0; j < thresholds[i].length; j++) {
-          if (rand.nextInt(1_000_000) < mutationsPerMillion) {
-            float sign = rand.nextBoolean() ? 1f : -1f;
-            float newVal = sign * rand.nextFloat(0, margin) + thresholds[i][j];
-            newVal = newVal > 1f ? 1f : newVal;
-            newVal = newVal < -1f ? -1f : newVal;
-            thresholds[i][j] = newVal;
-          }
-        }
-      }
-    }
-    return thresholds;
-  }
-
   public NeuralNet clone(int newId) {
-    return new NeuralNet(newId, new File(DATA, "n" + newId), weights, thresholds);
+    return new NeuralNet(newId, new File(DATA, "n" + newId), weights);
   }
 
   public NeuralNet mutate(float margin, int mutationsPerMillion) {
-    return new NeuralNet(id, file, mutate(copy(weights), margin, mutationsPerMillion),
-        mutate(copy(thresholds), margin, mutationsPerMillion));
+    return new NeuralNet(id, file, mutate(copy(weights), margin, mutationsPerMillion));
   }
 
   public NeuralNet mergeAndMutate(NeuralNet other, int mergesPercent, float margin,
       int mutationsPerMillion) {
     return new NeuralNet(id, file,
-        mutate(merge(mergesPercent, copy(weights), other.weights), margin, mutationsPerMillion),
-        mutate(merge(mergesPercent, copy(thresholds), other.thresholds), margin,
-            mutationsPerMillion));
+        mutate(merge(mergesPercent, copy(weights), other.weights), margin, mutationsPerMillion));
   }
 
   public Decision decide(int[] input, int offset) {
@@ -245,23 +186,34 @@ public class NeuralNet implements Serializable {
     for (int i = 0; i < weights.length; i++) {
       for (int j = 0; j < weights[i].length; j++) {
         double sum = 0d;
-        for (int k = 0; k < weights[i][j].length; k++) {
-          if (i == 0) {
-            if (k % 2 == 0) {
-              sum += weights[i][j][k] * (input[k + offset] - minPrice) / scalePrice;
-            } else {
-              sum += weights[i][j][k] * (input[k + offset] - minVolume) / scaleVolume;
+        if (i == 0) {
+          if (j % 2 == 0) {
+            for (int k = 0; k < weights[i][j].length; k++) {
+              sum += weights[i][j][k] * (input[k * 2 + offset] - minPrice) / scalePrice;
+            }
+
+          } else {
+            for (int k = 1; k < weights[i][j].length; k++) {
+              sum += weights[i][j][k] * (input[k * 2 + offset] - minVolume) / scaleVolume;
+            }
+          }
+        } else if (i == 1) {
+          if (j % 2 == 0) {
+            for (int k = 0; k < weights[i][j].length; k++) {
+              sum += weights[i][j][k] * prev[k * 2];
             }
           } else {
+            for (int k = 1; k < weights[i][j].length; k++) {
+              sum += weights[i][j][k] * prev[k * 2];
+            }
+          }
+        } else {
+          for (int k = 0; k < weights[i][j].length; k++) {
             sum += weights[i][j][k] * prev[k];
           }
         }
-        if ((thresholds[i][j] < 0 && sum < thresholds[i][j]) || (thresholds[i][j] > 0
-            && sum > thresholds[i][j])) {
-          next[j] = (2d / (1d + Math.exp(-2d * sum))) - 1d;
-        } else {
-          next[j] = 0d;
-        }
+
+        next[j] = sum > 0d ? sum : 0d;
       }
       double[] tmp = prev;
       prev = next;
@@ -273,12 +225,12 @@ public class NeuralNet implements Serializable {
   @Override
   public boolean equals(Object obj) {
     return obj == this || (obj instanceof NeuralNet other && Arrays.deepEquals(weights,
-        other.weights) && Arrays.deepEquals(thresholds, other.thresholds));
+        other.weights));
   }
 
   @Override
   public int hashCode() {
-    return Arrays.deepHashCode(new Object[]{weights, thresholds});
+    return Arrays.deepHashCode(new Object[]{weights});
   }
 
   @Override
@@ -286,7 +238,7 @@ public class NeuralNet implements Serializable {
     StringBuilder builder = new StringBuilder();
     builder.append(weights.length).append("/");
     builder.append(weights[0].length).append("/");
-    builder.append(weights[0][0].length).append("/");
+    builder.append(weights[0][0].length * 2).append("/");
     builder.append("\n");
 
     for (int i = 0; i < weights.length; i++) {
@@ -294,12 +246,6 @@ public class NeuralNet implements Serializable {
         for (int k = 0; k < weights[i][j].length; k++) {
           builder.append(weights[i][j][k]).append(",");
         }
-      }
-    }
-    builder.append("\n");
-    for (int i = 0; i < thresholds.length; i++) {
-      for (int j = 0; j < thresholds[i].length; j++) {
-        builder.append(thresholds[i][j]).append(",");
       }
     }
     return builder.toString();

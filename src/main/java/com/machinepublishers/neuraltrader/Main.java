@@ -8,7 +8,6 @@ import java.rmi.server.UnicastRemoteObject;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Random;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
 public class Main {
@@ -22,7 +21,7 @@ public class Main {
   private static final int TRIES = 32;
   private static final int CHANCE = 80_000;
   private static final float MARGIN = .04f;
-  private static final int PRICE_HISTORY = 12 * 60;
+  private static final int PRICE_HISTORY = 6 * 60;
   private static final int WINDOW = 30;
   private static final int BUFFER_LEN = 2 * (PRICE_HISTORY + WINDOW * 2);
   private static final int EVAL_CHILDREN = 2;
@@ -116,32 +115,48 @@ public class Main {
 
   private static void startTestLogs() {
     new Thread(() -> {
-      int[] profitHistory = new int[30];
-      int[][] profitHistoryDetail = new int[NETS][30];
+      final int recent = 300;
+      final int allTime = 3000;
+      int[] profitHistory = new int[allTime];
+      int[][] profitHistoryDetail = new int[NETS][allTime];
+
       for (long x = 0; x < Long.MAX_VALUE; x++) {
         int[] data = prices.getData(false);
         int offset = randTime(data);
         int totalProfit = 0;
+        int cur = (int) (x % profitHistory.length);
         Log.info("========================================");
         for (int n = 0; n < NETS; n++) {
           NeuralNet net = nets.get(n);
           int profit = profit(net, data, offset);
           totalProfit += profit;
-          profitHistoryDetail[n][(int) (x % profitHistoryDetail[n].length)] = profit;
+          profitHistoryDetail[n][cur] = profit;
           int detailTotal = 0;
+          int detailTotalRecent = 0;
           for (int i = 0; i < profitHistoryDetail[n].length; i++) {
             detailTotal += profitHistoryDetail[n][i];
           }
-          Log.info("=> N%02d: %.2f (%.2f)", GROUP * NETS + n, profit / 100d, detailTotal / 100d);
+          for (int i = 0; i < recent; i++) {
+            int index = cur - i;
+            index = index < 0 ? allTime + index : index;
+            detailTotalRecent += profitHistoryDetail[n][index];
+          }
+          Log.info("=> N%02d: %.2f (%.2f) (%.2f)", GROUP * NETS + n, profit / 100d,
+              detailTotal / 100d, detailTotalRecent / 100d);
         }
-        profitHistory[(int) (x % profitHistory.length)] = totalProfit;
-        int allTimeProfit = 0;
+        profitHistory[cur] = totalProfit;
+        int profit = 0;
+        int profitRecent = 0;
         for (int i = 0; i < profitHistory.length; i++) {
-          allTimeProfit += profitHistory[i];
+          profit += profitHistory[i];
+        }
+        for (int i = 0; i < recent; i++) {
+          int index = cur - i;
+          index = index < 0 ? allTime + index : index;
+          profitRecent += profitHistory[index];
         }
         Log.info("========================================");
-        Log.info("===== %s $%.2f", allTimeProfit > 0 ? "WINNING" : "LOSING",
-            Math.abs(allTimeProfit / 100d));
+        Log.info("===== (%.2f) (%.2f)", profit / 100d, profitRecent / 100d);
         Log.info("========================================");
         try {
           long now = System.currentTimeMillis();
@@ -168,7 +183,7 @@ public class Main {
           }
         }
         try {
-          Thread.sleep(10 * 60 * 1000);
+          Thread.sleep(1 * 60 * 1000);
         } catch (InterruptedException e) {
           throw new RuntimeException(e);
         }
@@ -177,7 +192,7 @@ public class Main {
   }
 
   private static NeuralNet initNet(int index) {
-    return NeuralNet.create(index, 33, 24, PRICE_HISTORY * 2);
+    return NeuralNet.create(index, 5, 90, PRICE_HISTORY * 2);
   }
 
   private static NeuralNet save(NeuralNet next, int index) {
@@ -214,9 +229,9 @@ public class Main {
     NeuralNet prev = prevNets.get(index);
     NeuralNet[] nets = evalNets[index];
     int i = 0;
-    if (rand.nextInt(7000) == 0) {
-      nets[i++] = randOther(index, false);
-    } else if (rand.nextInt(500) == 0) {
+    if (rand.nextInt(1000) == 0) {
+      nets[i++] = randOther(index, false).clone(GROUP * NETS + index);
+    } else if (rand.nextInt(100) == 0) {
       nets[i++] = sibling.clone(GROUP * NETS + index);
     } else {
       nets[i++] = orig.mutate(factor * MARGIN, factor * CHANCE);
