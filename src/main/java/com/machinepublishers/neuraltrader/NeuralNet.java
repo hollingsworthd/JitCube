@@ -193,8 +193,8 @@ public class NeuralNet implements Serializable {
             }
 
           } else {
-            for (int k = 1; k < weights[i][j].length; k++) {
-              sum += weights[i][j][k] * (input[k * 2 - 1 + offset] - minVolume) / scaleVolume;
+            for (int k = 0; k < weights[i][j].length; k++) {
+              sum += weights[i][j][k] * (input[k * 2 + 1 + offset] - minVolume) / scaleVolume;
             }
           }
         } else if (i == 1) {
@@ -203,8 +203,8 @@ public class NeuralNet implements Serializable {
               sum += weights[i][j][k] * prev[k * 2];
             }
           } else {
-            for (int k = 1; k < weights[i][j].length; k++) {
-              sum += weights[i][j][k] * prev[k * 2 - 1];
+            for (int k = 0; k < weights[i][j].length; k++) {
+              sum += weights[i][j][k] * prev[k * 2 + 1];
             }
           }
         } else {

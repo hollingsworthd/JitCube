@@ -19,8 +19,8 @@ public class Main {
   private static final int GROUPS = Integer.parseInt(System.getProperty("groups"));
   private static final long INTERVAL = 1000L * Integer.parseInt(System.getProperty("interval"));
   private static final int TRIES = 32;
-  private static final int CHANCE = 80_000;
-  private static final float MARGIN = .04f;
+  private static final int CHANCE = 160_000;
+  private static final float MARGIN = .08f;
   private static final int PRICE_HISTORY = 6 * 60;
   private static final int WINDOW = 30;
   private static final int BUFFER_LEN = 2 * (PRICE_HISTORY + WINDOW * 2);
@@ -224,7 +224,7 @@ public class Main {
   }
 
   private static NeuralNet eval(NeuralNet orig, int index) {
-    int factor = (GROUP + 2) / 2;
+    int factor = GROUP + 1;
     NeuralNet sibling = randOther(index, true);
     NeuralNet prev = prevNets.get(index);
     NeuralNet[] nets = evalNets[index];
