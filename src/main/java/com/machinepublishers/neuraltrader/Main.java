@@ -19,8 +19,8 @@ public class Main {
   private static final int NETS = Integer.parseInt(System.getProperty("nets"));
   private static final int GROUPS = Integer.parseInt(System.getProperty("groups"));
   private static final long INTERVAL = 1000L * Integer.parseInt(System.getProperty("interval"));
-  private static final int TRIES = 2048;
-  private static final int CHANCE = 18_000;
+  private static final int TRIES = 4096;
+  private static final int CHANCE = 60_000;
   private static final int PRICE_HISTORY = 6 * 60;
   private static final int WINDOW = 30;
   private static final Prices prices = new Prices(2 * (PRICE_HISTORY + WINDOW * 2));
@@ -230,9 +230,9 @@ public class Main {
     NeuralNet prev = prevNets.get(index);
     NeuralNet[] nets = evalNets[index];
     int i = 0;
-    if (rand.nextInt(300) == 0) {
+    if (rand.nextInt(200) == 0) {
       nets[i++] = randOther(index, false).clone(GROUP * NETS + index);
-    } else if (rand.nextInt(30) == 0) {
+    } else if (rand.nextInt(20) == 0) {
       nets[i++] = sibling.clone(GROUP * NETS + index);
     } else {
       nets[i++] = orig.mergeAndMutate(sibling, 50, GROUP, mutations);
