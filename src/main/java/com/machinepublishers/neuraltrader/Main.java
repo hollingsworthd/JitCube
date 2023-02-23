@@ -19,17 +19,15 @@ public class Main {
   private static final int NETS = Integer.parseInt(System.getProperty("nets"));
   private static final int GROUPS = Integer.parseInt(System.getProperty("groups"));
   private static final long INTERVAL = 1000L * Integer.parseInt(System.getProperty("interval"));
-  private static final int TRIES = 32;
-  private static final int CHANCE = 160_000;
-  private static final float MARGIN = .08f;
+  private static final int TRIES = 2048;
+  private static final int CHANCE = 18_000;
   private static final int PRICE_HISTORY = 6 * 60;
   private static final int WINDOW = 30;
-  private static final int EVAL_CHILDREN = 2;
   private static final Prices prices = new Prices(2 * (PRICE_HISTORY + WINDOW * 2));
   private static final Random rand = new SecureRandom();
   private static final AtomicReferenceArray<NeuralNet> nets = new AtomicReferenceArray<>(NETS);
   private static final AtomicReferenceArray<NeuralNet> prevNets = new AtomicReferenceArray<>(NETS);
-  private static final NeuralNet[][] evalNets = new NeuralNet[NETS][EVAL_CHILDREN + 3];
+  private static final NeuralNet[][] evalNets = new NeuralNet[NETS][3];
   private static final int[][] curProfits = new int[NETS][evalNets[0].length];
   private static final Server server;
 
@@ -227,23 +225,20 @@ public class Main {
   }
 
   private static NeuralNet eval(NeuralNet orig, int index) {
-    int factor = GROUP + 1;
+    int mutations = CHANCE * (GROUPS - GROUP) / GROUPS;
     NeuralNet sibling = randOther(index, true);
     NeuralNet prev = prevNets.get(index);
     NeuralNet[] nets = evalNets[index];
     int i = 0;
-    if (rand.nextInt(1000) == 0) {
+    if (rand.nextInt(300) == 0) {
       nets[i++] = randOther(index, false).clone(GROUP * NETS + index);
-    } else if (rand.nextInt(100) == 0) {
+    } else if (rand.nextInt(30) == 0) {
       nets[i++] = sibling.clone(GROUP * NETS + index);
     } else {
-      nets[i++] = orig.mutate(factor * MARGIN, factor * CHANCE);
-    }
-    for (int x = 0; x < EVAL_CHILDREN; x++) {
-      nets[i++] = orig.mergeAndMutate(sibling, 25, factor * MARGIN, factor * CHANCE);
+      nets[i++] = orig.mergeAndMutate(sibling, 50, GROUP, mutations);
     }
     if (prev == orig) {
-      nets[i++] = orig.mergeAndMutate(sibling, 25, factor * MARGIN, factor * CHANCE);
+      nets[i++] = orig.mergeAndMutate(sibling, 50, GROUP, mutations);
       nets[i] = orig;
     } else {
       nets[i++] = orig;

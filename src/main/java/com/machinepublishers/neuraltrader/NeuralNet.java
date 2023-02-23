@@ -36,7 +36,7 @@ public class NeuralNet implements Serializable {
     this.file = saveTo;
     this.prev = initPrev(saveTo);
     layers += 1;
-    this.weights = mutate(initWeights(layers, len, inputLen), 1f, 1_000_000);
+    this.weights = mutate(initWeights(layers, len, inputLen), -1, 1_000_000);
     this.buffer1 = new double[this.weights[0].length];
     this.buffer2 = new double[this.weights[0].length];
   }
@@ -123,17 +123,25 @@ public class NeuralNet implements Serializable {
     return array1;
   }
 
-  private static float[][][] mutate(float[][][] weights, float margin, int mutationsPerMillion) {
+  private static float[][][] mutate(float[][][] weights, int factor, int mutationsPerMillion) {
     if (mutationsPerMillion > 0) {
       for (int i = 0; i < weights.length; i++) {
         for (int j = 0; j < weights[i].length; j++) {
           for (int k = 0; k < weights[i][j].length; k++) {
             if (rand.nextInt(1_000_000) < mutationsPerMillion) {
-              float sign = rand.nextBoolean() ? 1f : -1f;
-              float newVal = sign * rand.nextFloat(0, margin) + weights[i][j][k];
-              newVal = newVal > 1f ? 1f : newVal;
-              newVal = newVal < -1f ? -1f : newVal;
-              weights[i][j][k] = newVal;
+              double sign = rand.nextBoolean() ? 1d : -1d;
+              double newVal;
+              if (factor > -1) {
+                newVal = rand.nextDouble(.2d + .03d * (double) factor);
+                newVal = newVal * newVal * newVal;
+                newVal = sign * newVal + (double) weights[i][j][k];
+              } else {
+                newVal = sign * rand.nextDouble();
+              }
+              newVal = newVal > 1d ? 1d : newVal;
+              newVal = newVal < -1d ? -1d : newVal;
+              newVal = Math.abs(newVal) < .0000001d ? 0d : newVal;
+              weights[i][j][k] = (float) newVal;
             }
           }
         }
@@ -146,14 +154,11 @@ public class NeuralNet implements Serializable {
     return new NeuralNet(newId, new File(DATA, "n" + newId), weights);
   }
 
-  public NeuralNet mutate(float margin, int mutationsPerMillion) {
-    return new NeuralNet(id, file, mutate(copy(weights), margin, mutationsPerMillion));
-  }
-
-  public NeuralNet mergeAndMutate(NeuralNet other, int mergesPercent, float margin,
+  public NeuralNet mergeAndMutate(NeuralNet other, int mergesPercent, int mutationFactor,
       int mutationsPerMillion) {
     return new NeuralNet(id, file,
-        mutate(merge(mergesPercent, copy(weights), other.weights), margin, mutationsPerMillion));
+        mutate(merge(mergesPercent, copy(weights), other.weights), mutationFactor,
+            mutationsPerMillion));
   }
 
   public Decision decide(int[] input, int offset) {
@@ -189,27 +194,29 @@ public class NeuralNet implements Serializable {
         if (i == 0) {
           if (j % 2 == 0) {
             for (int k = 0; k < weights[i][j].length; k++) {
-              sum += weights[i][j][k] * (input[k * 2 + offset] - minPrice) / scalePrice;
+              sum += (double) weights[i][j][k] * (double) (input[k * 2 + offset] - minPrice)
+                  / scalePrice;
             }
 
           } else {
             for (int k = 0; k < weights[i][j].length; k++) {
-              sum += weights[i][j][k] * (input[k * 2 + 1 + offset] - minVolume) / scaleVolume;
+              sum += (double) weights[i][j][k] * (double) (input[k * 2 + 1 + offset] - minVolume)
+                  / scaleVolume;
             }
           }
         } else if (i == 1) {
           if (j % 2 == 0) {
             for (int k = 0; k < weights[i][j].length; k++) {
-              sum += weights[i][j][k] * prev[k * 2];
+              sum += (double) weights[i][j][k] * prev[k * 2];
             }
           } else {
             for (int k = 0; k < weights[i][j].length; k++) {
-              sum += weights[i][j][k] * prev[k * 2 + 1];
+              sum += (double) weights[i][j][k] * prev[k * 2 + 1];
             }
           }
         } else {
           for (int k = 0; k < weights[i][j].length; k++) {
-            sum += weights[i][j][k] * prev[k];
+            sum += (double) weights[i][j][k] * prev[k];
           }
         }
 

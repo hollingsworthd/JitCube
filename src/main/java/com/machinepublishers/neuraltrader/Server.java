@@ -10,5 +10,5 @@ public interface Server extends Remote {
 
   NeuralNet download(String key, int indexFrom, int indexTo) throws RemoteException;
 
-  Marker randPriceMarker(String key, boolean training, long sync)throws RemoteException;
+  Marker randPriceMarker(String key, boolean training, long sync) throws RemoteException;
 }
