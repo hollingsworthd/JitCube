@@ -132,8 +132,8 @@ public class NeuralNet implements Serializable {
               double sign = rand.nextBoolean() ? 1d : -1d;
               double newVal;
               if (factor > -1) {
-                newVal = rand.nextDouble(.1d + .05d * (double) factor);
-                newVal = newVal * newVal;
+                newVal = rand.nextDouble(.15d + .03d * (double) factor);
+                newVal = newVal * newVal * newVal;
                 newVal = sign * newVal + (double) weights[i][j][k];
               } else {
                 newVal = sign * rand.nextDouble();

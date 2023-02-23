@@ -7,8 +7,8 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.security.SecureRandom;
-import java.util.Arrays;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicLongArray;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
 public class Main {
@@ -19,16 +19,15 @@ public class Main {
   private static final int NETS = Integer.parseInt(System.getProperty("nets"));
   private static final int GROUPS = Integer.parseInt(System.getProperty("groups"));
   private static final long INTERVAL = 1000L * Integer.parseInt(System.getProperty("interval"));
-  private static final int TRIES = 4096;
-  private static final int CHANCE = 60_000;
+  private static final int TRIES = 32;
+  private static final int CHANCE = 3_000;
   private static final int PRICE_HISTORY = 6 * 60;
   private static final int WINDOW = 30;
   private static final Prices prices = new Prices(2 * (PRICE_HISTORY + WINDOW * 2));
   private static final Random rand = new SecureRandom();
   private static final AtomicReferenceArray<NeuralNet> nets = new AtomicReferenceArray<>(NETS);
   private static final AtomicReferenceArray<NeuralNet> prevNets = new AtomicReferenceArray<>(NETS);
-  private static final NeuralNet[][] evalNets = new NeuralNet[NETS][3];
-  private static final int[][] curProfits = new int[NETS][evalNets[0].length];
+  private static final AtomicLongArray evolutions = new AtomicLongArray(NETS);
   private static final Server server;
 
   static {
@@ -152,8 +151,8 @@ public class Main {
             index = index < 0 ? allTime + index : index;
             detailTotalRecent += profitHistoryDetail[n][index];
           }
-          Log.info("=> N%02d: %.2f (%.2f) (%.2f)", GROUP * NETS + n, profit / 100d,
-              detailTotal / 100d, detailTotalRecent / 100d);
+          Log.info("=> N%02d %04d: %.2f (%.2f) (%.2f)", GROUP * NETS + n, evolutions.get(n),
+              profit / 100d, detailTotal / 100d, detailTotalRecent / 100d);
         }
         profitHistory[cur] = totalProfit;
         int profit = 0;
@@ -226,45 +225,41 @@ public class Main {
 
   private static NeuralNet eval(NeuralNet orig, int index) {
     int mutations = CHANCE * (GROUPS - GROUP) / GROUPS;
-    NeuralNet sibling = randOther(index, true);
     NeuralNet prev = prevNets.get(index);
-    NeuralNet[] nets = evalNets[index];
-    int i = 0;
-    if (rand.nextInt(200) == 0) {
-      nets[i++] = randOther(index, false).clone(GROUP * NETS + index);
-    } else if (rand.nextInt(20) == 0) {
-      nets[i++] = sibling.clone(GROUP * NETS + index);
+    NeuralNet next;
+    if (rand.nextInt(300_000) == 0) {
+      next = randOther(index, false).clone(GROUP * NETS + index);
+    } else if (rand.nextInt(30_000) == 0) {
+      next = randOther(index, true).clone(GROUP * NETS + index);
     } else {
-      nets[i++] = orig.mergeAndMutate(sibling, 50, GROUP, mutations);
+      next = orig.mergeAndMutate(randOther(index, true), 50, GROUP, mutations);
     }
-    if (prev == orig) {
-      nets[i++] = orig.mergeAndMutate(sibling, 50, GROUP, mutations);
-      nets[i] = orig;
-    } else {
-      nets[i++] = orig;
-      nets[i] = prev;
-    }
-    return evalScaled(nets, index);
+    return evalScaled(orig, prev, next, index);
   }
 
-  private static NeuralNet evalScaled(NeuralNet[] nets, int index) {
-    Arrays.fill(curProfits[index], 0);
+  private static NeuralNet evalScaled(NeuralNet cur, NeuralNet prev, NeuralNet next, int index) {
+    long curProfitTotal = 0;
+    long prevProfitTotal = 0;
+    long nextProfitTotal = 0;
     for (int i = 0; i < TRIES; i++) {
       Marker offset = prices.rand(true);
       int[] data = prices.getData(offset);
-      for (int n = 0; n < nets.length; n++) {
-        curProfits[index][n] += profit(nets[n], data, offset.offset());
+      long curProfit = 0;
+      long prevProfit = 0;
+      long nextProfit = profit(next, data, offset.offset());
+      if (nextProfit < (curProfit = profit(cur, data, offset.offset()))
+          || nextProfit < (prevProfit = profit(prev, data, offset.offset()))) {
+        return cur;
       }
+      curProfitTotal += curProfit;
+      prevProfitTotal += prevProfit;
+      nextProfitTotal += nextProfit;
     }
-    int best = Integer.MIN_VALUE;
-    int bestIndex = -1;
-    for (int n = 0; n < nets.length; n++) {
-      if (curProfits[index][n] >= best) {
-        best = curProfits[index][n];
-        bestIndex = n;
-      }
+    if (nextProfitTotal < curProfitTotal || nextProfitTotal < prevProfitTotal) {
+      return cur;
     }
-    return nets[bestIndex];
+    evolutions.incrementAndGet(index);
+    return next;
   }
 
   private static int profit(NeuralNet net, int[] data, int offset) {
