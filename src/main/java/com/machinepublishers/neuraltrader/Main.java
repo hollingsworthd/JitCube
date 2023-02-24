@@ -19,8 +19,9 @@ public class Main {
   private static final int NETS = Integer.parseInt(System.getProperty("nets"));
   private static final int GROUPS = Integer.parseInt(System.getProperty("groups"));
   private static final long INTERVAL = 1000L * Integer.parseInt(System.getProperty("interval"));
-  private static final int TRIES = 32;
-  private static final int CHANCE = 3_000;
+  private static final int TRIES = 64;
+  private static final int FAIL_TRIES = 24;
+  private static final int CHANCE = 210_000;
   private static final int PRICE_HISTORY = 6 * 60;
   private static final int WINDOW = 30;
   private static final Prices prices = new Prices(2 * (PRICE_HISTORY + WINDOW * 2));
@@ -100,8 +101,15 @@ public class Main {
   private static void startEval(NeuralNet net, int index) {
     new Thread(() -> {
       NeuralNet cur = net;
+//      long dur = 0, iter = 0;
       while (true) {
+//        ++iter;
+//        long start = System.nanoTime();
         NeuralNet next = eval(cur, index);
+//        dur += System.nanoTime() - start;
+//        if (iter % 10 == 0) {
+//          System.out.println((int) (dur / (iter * 1_000_000d)));
+//        }
         if (next != cur) {
           save(next, index);
           cur = next;
@@ -151,7 +159,7 @@ public class Main {
             index = index < 0 ? allTime + index : index;
             detailTotalRecent += profitHistoryDetail[n][index];
           }
-          Log.info("=> N%02d %04d: %.2f (%.2f) (%.2f)", GROUP * NETS + n, evolutions.get(n),
+          Log.info(">N%02d %05d: %.2f (%.2f) (%.2f)", GROUP * NETS + n, evolutions.get(n),
               profit / 100d, detailTotal / 100d, detailTotalRecent / 100d);
         }
         profitHistory[cur] = totalProfit;
@@ -224,15 +232,15 @@ public class Main {
   }
 
   private static NeuralNet eval(NeuralNet orig, int index) {
-    int mutations = CHANCE * (GROUPS - GROUP) / GROUPS;
+    int mutations = CHANCE * (GROUPS - GROUP) / (GROUPS);
     NeuralNet prev = prevNets.get(index);
     NeuralNet next;
-    if (rand.nextInt(300_000) == 0) {
+    if (rand.nextInt(10_000) == 0) {
       next = randOther(index, false).clone(GROUP * NETS + index);
-    } else if (rand.nextInt(30_000) == 0) {
+    } else if (rand.nextInt(1_000) == 0) {
       next = randOther(index, true).clone(GROUP * NETS + index);
     } else {
-      next = orig.mergeAndMutate(randOther(index, true), 50, GROUP, mutations);
+      next = orig.mergeAndMutate(randOther(index, true), 25, GROUP, mutations);
     }
     return evalScaled(orig, prev, next, index);
   }
@@ -241,15 +249,18 @@ public class Main {
     long curProfitTotal = 0;
     long prevProfitTotal = 0;
     long nextProfitTotal = 0;
+    int failTries = 0;
     for (int i = 0; i < TRIES; i++) {
       Marker offset = prices.rand(true);
       int[] data = prices.getData(offset);
-      long curProfit = 0;
-      long prevProfit = 0;
+      long curProfit = profit(cur, data, offset.offset());
+      long prevProfit = profit(prev, data, offset.offset());
       long nextProfit = profit(next, data, offset.offset());
-      if (nextProfit < (curProfit = profit(cur, data, offset.offset()))
-          || nextProfit < (prevProfit = profit(prev, data, offset.offset()))) {
-        return cur;
+      if (nextProfit < curProfit || nextProfit < prevProfit) {
+        ++failTries;
+        if (failTries == FAIL_TRIES) {
+          return cur;
+        }
       }
       curProfitTotal += curProfit;
       prevProfitTotal += prevProfit;
