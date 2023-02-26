@@ -17,26 +17,26 @@ public class NeuralNet implements Serializable {
 
   private final double[] buffer1;
   private final double[] buffer2;
+  private final long generation;
   private final int id;
   private final File file;
-  private final File prev;
   private final float[][][] weights;
 
-  private NeuralNet(int id, File saveTo, float[][][] weights) {
+  private NeuralNet(long generation, int id, File saveTo, float[][][] weights) {
+    this.generation = generation;
     this.id = id;
     this.file = saveTo;
-    this.prev = initPrev(saveTo);
     this.weights = weights;
     this.buffer1 = new double[this.weights[0].length];
     this.buffer2 = new double[this.weights[0].length];
   }
 
-  private NeuralNet(int id, File saveTo, int layers, int len, int inputLen) {
+  private NeuralNet(long generation, int id, File saveTo, int layers, int len, int inputLen) {
+    this.generation = generation;
     this.id = id;
     this.file = saveTo;
-    this.prev = initPrev(saveTo);
     layers += 1;
-    this.weights = mutate(initWeights(layers, len, inputLen), -1, 1_000_000);
+    this.weights = mutate(initWeights(layers, len, inputLen), true, 1_000_000);
     this.buffer1 = new double[this.weights[0].length];
     this.buffer2 = new double[this.weights[0].length];
   }
@@ -44,13 +44,13 @@ public class NeuralNet implements Serializable {
   private NeuralNet(int id, File readFrom, File saveTo) {
     this.id = id;
     this.file = saveTo;
-    this.prev = initPrev(saveTo);
     String[] lines = LockedFile.read(readFrom).split("\n");
 
     String[] dimensions = lines[0].split("/");
     int layers = Integer.parseInt(dimensions[0]);
     int len = Integer.parseInt(dimensions[1]);
     int inputLen = Integer.parseInt(dimensions[2]);
+    this.generation = Long.parseLong(dimensions[3]);
 
     float[][][] weights = initWeights(layers, len, inputLen);
     String[] weightTokens = lines[1].split(",");
@@ -71,19 +71,14 @@ public class NeuralNet implements Serializable {
     return new NeuralNet(idTo, new File(DATA, "n" + idFrom), new File(DATA, "n" + idTo));
   }
 
-  public static NeuralNet create(int id, int layers, int len, int inputLen) {
+  public static NeuralNet create(long generation, int id, int layers, int len, int inputLen) {
     File file = new File(DATA, "n" + id);
     if (LockedFile.exists(file)) {
       return new NeuralNet(id, file, file);
     }
-    NeuralNet net = new NeuralNet(id, file, layers, len, inputLen);
+    NeuralNet net = new NeuralNet(generation, id, file, layers, len, inputLen);
     net.save();
-    net.savePrev();
     return net;
-  }
-
-  private static File initPrev(File file) {
-    return new File(DATA, file.getName() + ".prev");
   }
 
   private static float[][][] initWeights(int layers, int len, int inputLen) {
@@ -123,24 +118,26 @@ public class NeuralNet implements Serializable {
     return array1;
   }
 
-  private static float[][][] mutate(float[][][] weights, int factor, int mutationsPerMillion) {
+  private static float[][][] mutate(float[][][] weights, boolean init, int mutationsPerMillion) {
     if (mutationsPerMillion > 0) {
       for (int i = 0; i < weights.length; i++) {
         for (int j = 0; j < weights[i].length; j++) {
           for (int k = 0; k < weights[i][j].length; k++) {
             if (rand.nextInt(1_000_000) < mutationsPerMillion) {
-              double sign = rand.nextBoolean() ? 1d : -1d;
               double newVal;
-              if (factor > -1) {
-                newVal = rand.nextDouble(.3d + .1d * (double) factor);
-                newVal = newVal * newVal;
-                newVal = sign * newVal + (double) weights[i][j][k];
+              if (init) {
+                newVal = (rand.nextBoolean() ? 1d : -1d) * rand.nextDouble();
               } else {
-                newVal = sign * rand.nextDouble();
+                newVal = rand.nextDouble(.00001d, .5d);
+                newVal = rand.nextDouble(newVal * newVal * newVal);
+                double weight = weights[i][j][k];
+                double sign = (weight == 1d ? -1d
+                    : (weight == -1d ? 1d : (rand.nextBoolean() ? 1d : -1d)));
+                newVal = sign * newVal + weight;
               }
               newVal = newVal > 1d ? 1d : newVal;
               newVal = newVal < -1d ? -1d : newVal;
-              newVal = Math.abs(newVal) < .0000001d ? 0d : newVal;
+              newVal = Math.abs(newVal) < .000001d ? 0d : newVal;
               weights[i][j][k] = (float) newVal;
             }
           }
@@ -150,15 +147,17 @@ public class NeuralNet implements Serializable {
     return weights;
   }
 
-  public NeuralNet clone(int newId) {
-    return new NeuralNet(newId, new File(DATA, "n" + newId), weights);
+  public NeuralNet clone(int newId, boolean newGeneration) {
+    return new NeuralNet(newGeneration ? rand.nextLong() : generation, newId,
+        new File(DATA, "n" + newId), weights);
   }
 
-  public NeuralNet mergeAndMutate(NeuralNet other, int mergesPercent, int mutationFactor,
-      int mutationsPerMillion) {
-    return new NeuralNet(id, file,
-        mutate(merge(mergesPercent, copy(weights), other.weights), mutationFactor,
-            mutationsPerMillion));
+  public NeuralNet mergeAndMutate(NeuralNet other, int mergesPercent, int mutationsPerMillion) {
+    if (generation == other.generation) {
+      return new NeuralNet(generation, id, file,
+          mutate(merge(mergesPercent, copy(weights), other.weights), false, mutationsPerMillion));
+    }
+    return other.clone(id, false);
   }
 
   public Decision decide(int[] input, int offset) {
@@ -246,6 +245,7 @@ public class NeuralNet implements Serializable {
     builder.append(weights.length).append("/");
     builder.append(weights[0].length).append("/");
     builder.append(weights[0][0].length * 2).append("/");
+    builder.append(generation).append("/");
     builder.append("\n");
 
     for (int i = 0; i < weights.length; i++) {
@@ -260,13 +260,5 @@ public class NeuralNet implements Serializable {
 
   public void save() {
     LockedFile.write(file, toString());
-  }
-
-  public void savePrev() {
-    LockedFile.write(prev, toString());
-  }
-
-  public NeuralNet getPrev() {
-    return new NeuralNet(id, prev, file);
   }
 }

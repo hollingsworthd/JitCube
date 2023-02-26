@@ -19,15 +19,14 @@ public class Main {
   private static final int NETS = Integer.parseInt(System.getProperty("nets"));
   private static final int GROUPS = Integer.parseInt(System.getProperty("groups"));
   private static final long INTERVAL = 1000L * Integer.parseInt(System.getProperty("interval"));
-  private static final int TRIES = 64;
+  private static final int TRIES = 48;
   private static final int FAIL_TRIES = 24;
-  private static final int CHANCE = 210_000;
+  private static final int CHANCE = 400_000;
   private static final int PRICE_HISTORY = 6 * 60;
   private static final int WINDOW = 30;
   private static final Prices prices = new Prices(2 * (PRICE_HISTORY + WINDOW * 2));
   private static final Random rand = new SecureRandom();
   private static final AtomicReferenceArray<NeuralNet> nets = new AtomicReferenceArray<>(NETS);
-  private static final AtomicReferenceArray<NeuralNet> prevNets = new AtomicReferenceArray<>(NETS);
   private static final AtomicLongArray evolutions = new AtomicLongArray(NETS);
   private static final Server server;
 
@@ -56,20 +55,17 @@ public class Main {
     }
     for (int n = 0; n < NETS; n++) {
       NeuralNet net = initNet(GROUP * NETS + n);
-      NeuralNet prev = net.getPrev();
       nets.set(n, net);
-      prevNets.set(n, prev == null ? net : prev);
     }
 
     Runtime.getRuntime().addShutdownHook(new Thread(() -> {
       for (int n = 0; n < NETS; n++) {
         nets.get(n).save();
-        prevNets.get(n).savePrev();
       }
       if (server != null) {
         for (int n = 0; n < NETS; n++) {
           try {
-            server.upload(getKey(), nets.get(n), prevNets.get(n));
+            server.upload(getKey(), nets.get(n));
           } catch (RemoteException e) {
             e.printStackTrace();
           }
@@ -100,28 +96,24 @@ public class Main {
 
   private static void startEval(NeuralNet net, int index) {
     new Thread(() -> {
-      NeuralNet cur = net;
-//      long dur = 0, iter = 0;
+//      long dur = 0, iter = 0; //
       while (true) {
-//        ++iter;
-//        long start = System.nanoTime();
-        NeuralNet next = eval(cur, index);
-//        dur += System.nanoTime() - start;
-//        if (iter % 10 == 0) {
-//          System.out.println((int) (dur / (iter * 1_000_000d)));
-//        }
-        if (next != cur) {
-          save(next, index);
-          cur = next;
-        }
+//        ++iter; //
+//        long start = System.nanoTime(); //
+        eval(index);
+//        dur += System.nanoTime() - start; //
+//        if (iter % 10 == 0) { //
+//          System.out.println((int) (dur / (iter * 1_000_000d))); //
+//        } //
       }
     }, "n" + (GROUP * NETS + index)).start();
   }
 
   private static void startTestLogs() {
     new Thread(() -> {
-      final int recent = 300;
-      final int allTime = 3000;
+      final int day = 48;
+      final int recent = 336;
+      final int allTime = 4383;
       int[] profitHistory = new int[allTime];
       int[][] profitHistoryDetail = new int[NETS][allTime];
       Marker marker;
@@ -143,7 +135,7 @@ public class Main {
         int[] data = prices.getData(marker);
         int totalProfit = 0;
         int cur = (int) (x % profitHistory.length);
-        Log.info("========================================");
+        Log.info("=======================================================");
         for (int n = 0; n < NETS; n++) {
           NeuralNet net = nets.get(n);
           int profit = profit(net, data, marker.offset());
@@ -151,6 +143,7 @@ public class Main {
           profitHistoryDetail[n][cur] = profit;
           int detailTotal = 0;
           int detailTotalRecent = 0;
+          int detailTotalDay = 0;
           for (int i = 0; i < profitHistoryDetail[n].length; i++) {
             detailTotal += profitHistoryDetail[n][i];
           }
@@ -159,12 +152,23 @@ public class Main {
             index = index < 0 ? allTime + index : index;
             detailTotalRecent += profitHistoryDetail[n][index];
           }
-          Log.info(">N%02d %05d: %.2f (%.2f) (%.2f)", GROUP * NETS + n, evolutions.get(n),
-              profit / 100d, detailTotal / 100d, detailTotalRecent / 100d);
+          for (int i = 0, start = cur - (cur % day); i < day; i++) {
+            int index = start - i - 1;
+            index = index < 0 ? index + allTime : index;
+            detailTotalDay += profitHistoryDetail[n][index];
+          }
+          long evolution = evolutions.get(n);
+          if (evolution >= 1_000_000) {
+            evolutions.set(n, 0);
+            evolution = 0;
+          }
+          Log.info(">N%02d %06d: %.2f (%.2f) (%.2f) (%.2f)", GROUP * NETS + n, evolution,
+              profit / 100d, detailTotal / 100d, detailTotalRecent / 100d, detailTotalDay / 100d);
         }
         profitHistory[cur] = totalProfit;
         int profit = 0;
         int profitRecent = 0;
+        int profitDay = 0;
         for (int i = 0; i < profitHistory.length; i++) {
           profit += profitHistory[i];
         }
@@ -173,9 +177,15 @@ public class Main {
           index = index < 0 ? allTime + index : index;
           profitRecent += profitHistory[index];
         }
-        Log.info("========================================");
-        Log.info("===== (%.2f) (%.2f)", profit / 100d, profitRecent / 100d);
-        Log.info("========================================");
+        for (int i = 0, start = cur - (cur % day); i < day; i++) {
+          int index = start - i - 1;
+          index = index < 0 ? index + allTime : index;
+          profitDay += profitHistory[index];
+        }
+        Log.info("=======================================================");
+        Log.info("===== (%.2f) (%.2f) (%.2f)", profit / 100d, profitRecent / 100d,
+            profitDay / 100d);
+        Log.info("=======================================================");
       }
     }).start();
   }
@@ -185,10 +195,9 @@ public class Main {
       while (true) {
         for (int n = 0; n < NETS; n++) {
           NeuralNet cur = nets.get(n);
-          NeuralNet prev = prevNets.get(n);
           if (server != null) {
             try {
-              server.upload(getKey(), cur, prev);
+              server.upload(getKey(), cur);
             } catch (RemoteException e) {
               e.printStackTrace();
             }
@@ -204,11 +213,11 @@ public class Main {
   }
 
   private static NeuralNet initNet(int index) {
-    return NeuralNet.create(index, 5, 90, PRICE_HISTORY * 2);
+    return NeuralNet.create(index / NETS, index, 5, 90, PRICE_HISTORY * 2);
   }
 
   private static NeuralNet save(NeuralNet next, int index) {
-    prevNets.set(index, nets.getAndSet(index, next));
+    nets.set(index, next);
     return next;
   }
 
@@ -231,42 +240,43 @@ public class Main {
     return randOther(index, true);
   }
 
-  private static NeuralNet eval(NeuralNet orig, int index) {
-    int mutations = CHANCE * (GROUPS - GROUP) / (GROUPS);
-    NeuralNet prev = prevNets.get(index);
+  private static void eval(int index) {
+    NeuralNet orig = nets.get(index);
     NeuralNet next;
     if (rand.nextInt(10_000) == 0) {
-      next = randOther(index, false).clone(GROUP * NETS + index);
-    } else if (rand.nextInt(1_000) == 0) {
-      next = randOther(index, true).clone(GROUP * NETS + index);
+      next = randOther(index, false).clone(GROUP * NETS + index, true);
     } else {
-      next = orig.mergeAndMutate(randOther(index, true), 25, GROUP, mutations);
+      double r = rand.nextDouble();
+      int mutations = rand.nextInt(Math.max(1, (int) (r * r * CHANCE)));
+      r = rand.nextDouble();
+      int merges = rand.nextInt(Math.max(1, (int) (r * r * 100d)));
+      next = orig.mergeAndMutate(randOther(index, true), merges, mutations);
     }
-    return evalScaled(orig, prev, next, index);
+    NeuralNet best = evalScaled(orig, next, index);
+    if (best != orig) {
+      save(best, index);
+    }
   }
 
-  private static NeuralNet evalScaled(NeuralNet cur, NeuralNet prev, NeuralNet next, int index) {
+  private static NeuralNet evalScaled(NeuralNet cur, NeuralNet next, int index) {
     long curProfitTotal = 0;
-    long prevProfitTotal = 0;
     long nextProfitTotal = 0;
     int failTries = 0;
     for (int i = 0; i < TRIES; i++) {
       Marker offset = prices.rand(true);
       int[] data = prices.getData(offset);
       long curProfit = profit(cur, data, offset.offset());
-      long prevProfit = profit(prev, data, offset.offset());
       long nextProfit = profit(next, data, offset.offset());
-      if (nextProfit < curProfit || nextProfit < prevProfit) {
+      if (nextProfit < curProfit) {
         ++failTries;
         if (failTries == FAIL_TRIES) {
           return cur;
         }
       }
       curProfitTotal += curProfit;
-      prevProfitTotal += prevProfit;
       nextProfitTotal += nextProfit;
     }
-    if (nextProfitTotal < curProfitTotal || nextProfitTotal < prevProfitTotal) {
+    if (nextProfitTotal < curProfitTotal) {
       return cur;
     }
     evolutions.incrementAndGet(index);
