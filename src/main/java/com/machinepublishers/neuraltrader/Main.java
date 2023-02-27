@@ -20,8 +20,8 @@ public class Main {
   private static final int GROUPS = Integer.parseInt(System.getProperty("groups"));
   private static final long INTERVAL = 1000L * Integer.parseInt(System.getProperty("interval"));
   private static final int TRIES = 48;
-  private static final int FAIL_TRIES = 24;
-  private static final int CHANCE = 400_000;
+  private static final int FAIL_TRIES = 28;
+  private static final int CHANCE = 100_000;
   private static final int PRICE_HISTORY = 6 * 60;
   private static final int WINDOW = 30;
   private static final Prices prices = new Prices(2 * (PRICE_HISTORY + WINDOW * 2));
@@ -269,7 +269,7 @@ public class Main {
       long nextProfit = profit(next, data, offset.offset());
       if (nextProfit < curProfit) {
         ++failTries;
-        if (failTries == FAIL_TRIES) {
+        if (failTries > FAIL_TRIES) {
           return cur;
         }
       }
