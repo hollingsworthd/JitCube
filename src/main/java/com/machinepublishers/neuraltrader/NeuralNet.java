@@ -129,7 +129,7 @@ public class NeuralNet implements Serializable {
                 newVal = (rand.nextBoolean() ? 1d : -1d) * rand.nextDouble();
               } else {
                 newVal = rand.nextDouble(.00001d, .2d);
-                newVal = rand.nextDouble(newVal * newVal * newVal);
+                newVal = rand.nextDouble(newVal * newVal);
                 double weight = weights[i][j][k];
                 double sign = (weight == 1d ? -1d
                     : (weight == -1d ? 1d : (rand.nextBoolean() ? 1d : -1d)));
@@ -137,7 +137,7 @@ public class NeuralNet implements Serializable {
               }
               newVal = newVal > 1d ? 1d : newVal;
               newVal = newVal < -1d ? -1d : newVal;
-              newVal = Math.abs(newVal) < .000001d ? 0d : newVal;
+              newVal = Math.abs(newVal) < .00001d ? 0d : newVal;
               weights[i][j][k] = (float) newVal;
             }
           }

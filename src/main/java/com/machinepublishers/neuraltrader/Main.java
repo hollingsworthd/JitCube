@@ -19,8 +19,9 @@ public class Main {
   private static final int NETS = Integer.parseInt(System.getProperty("nets"));
   private static final int GROUPS = Integer.parseInt(System.getProperty("groups"));
   private static final long INTERVAL = 1000L * Integer.parseInt(System.getProperty("interval"));
-  private static final int TRIES = 48;
-  private static final int FAIL_TRIES = 27;
+  private static final int TRIES = 32;
+  private static final int FAIL_TRIES = 4;
+  private static final int FAIL_DIFF = 2;
   private static final int CHANCE = 1_000_000;
   private static final int PRICE_HISTORY = 6 * 60;
   private static final int WINDOW = 30;
@@ -243,7 +244,7 @@ public class Main {
   private static void eval(int index) {
     NeuralNet orig = nets.get(index);
     NeuralNet next;
-    if (rand.nextInt(10_000) == 0) {
+    if (rand.nextInt(5_000) == 0) {
       next = randOther(index, false).clone(GROUP * NETS + index, true);
     } else {
       double r = rand.nextDouble();
@@ -261,22 +262,26 @@ public class Main {
   private static NeuralNet evalScaled(NeuralNet cur, NeuralNet next, int index) {
     long curProfitTotal = 0;
     long nextProfitTotal = 0;
-    int failTries = 0;
+    int comparison = 0;
+    int fails = 0;
     for (int i = 0; i < TRIES; i++) {
       Marker offset = prices.rand(true);
       int[] data = prices.getData(offset);
       long curProfit = profit(cur, data, offset.offset());
       long nextProfit = profit(next, data, offset.offset());
       if (nextProfit < curProfit) {
-        ++failTries;
-        if (failTries > FAIL_TRIES) {
+        ++fails;
+        --comparison;
+        if (TRIES - i - 1 + comparison < FAIL_DIFF || fails > FAIL_TRIES) {
           return cur;
         }
+      } else if (nextProfit > curProfit) {
+        ++comparison;
       }
       curProfitTotal += curProfit;
       nextProfitTotal += nextProfit;
     }
-    if (nextProfitTotal < curProfitTotal) {
+    if (nextProfitTotal <= curProfitTotal || comparison < FAIL_DIFF) {
       return cur;
     }
     evolutions.incrementAndGet(index);
