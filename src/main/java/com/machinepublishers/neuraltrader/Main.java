@@ -244,7 +244,7 @@ public class Main {
     if (rand.nextInt(5_000) == 0) {
       next = randOther(index, false).clone(GROUP * NETS + index, true);
     } else {
-      next = orig.mergeAndMutate(randOther(index, true), 25, 10_000);
+      next = orig.mergeAndMutate(randOther(index, true), 25, 50_000);
     }
     NeuralNet best = evalScaled(orig, next, index);
     if (best != orig) {
