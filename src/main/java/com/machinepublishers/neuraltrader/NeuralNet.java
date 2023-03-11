@@ -123,13 +123,13 @@ public class NeuralNet implements Serializable {
       for (int i = 0; i < weights.length; i++) {
         for (int j = 0; j < weights[i].length; j++) {
           for (int k = 0; k < weights[i][j].length; k++) {
-            if (rand.nextInt(1_000_000) < mutationsPerMillion) {
+            if (mutationsPerMillion == 1_000_000 || rand.nextInt(1_000_000) < mutationsPerMillion) {
               double newVal;
               if (init) {
                 newVal = (rand.nextBoolean() ? 1d : -1d) * rand.nextDouble();
               } else {
-                newVal = rand.nextDouble(.00001d, .2d);
-                newVal = rand.nextDouble(newVal * newVal);
+                newVal = rand.nextDouble(.001d, .1d);
+                newVal *= newVal;
                 double weight = weights[i][j][k];
                 double sign = (weight == 1d ? -1d
                     : (weight == -1d ? 1d : (rand.nextBoolean() ? 1d : -1d)));
@@ -137,7 +137,7 @@ public class NeuralNet implements Serializable {
               }
               newVal = newVal > 1d ? 1d : newVal;
               newVal = newVal < -1d ? -1d : newVal;
-              newVal = Math.abs(newVal) < .00001d ? 0d : newVal;
+              newVal = Math.abs(newVal) < .000001d ? 0d : newVal;
               weights[i][j][k] = (float) newVal;
             }
           }

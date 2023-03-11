@@ -20,9 +20,6 @@ public class Main {
   private static final int GROUPS = Integer.parseInt(System.getProperty("groups"));
   private static final long INTERVAL = 1000L * Integer.parseInt(System.getProperty("interval"));
   private static final int TRIES = 32;
-  private static final int FAIL_TRIES = 4;
-  private static final int FAIL_DIFF = 2;
-  private static final int CHANCE = 1_000_000;
   private static final int PRICE_HISTORY = 6 * 60;
   private static final int WINDOW = 30;
   private static final Prices prices = new Prices(2 * (PRICE_HISTORY + WINDOW * 2));
@@ -247,11 +244,7 @@ public class Main {
     if (rand.nextInt(5_000) == 0) {
       next = randOther(index, false).clone(GROUP * NETS + index, true);
     } else {
-      double r = rand.nextDouble();
-      int mutations = rand.nextInt(Math.max(1, (int) (r * r * CHANCE)));
-      r = rand.nextDouble();
-      int merges = rand.nextInt(Math.max(1, (int) (r * r * 100d)));
-      next = orig.mergeAndMutate(randOther(index, true), merges, mutations);
+      next = orig.mergeAndMutate(randOther(index, true), 25, 10_000);
     }
     NeuralNet best = evalScaled(orig, next, index);
     if (best != orig) {
@@ -262,26 +255,18 @@ public class Main {
   private static NeuralNet evalScaled(NeuralNet cur, NeuralNet next, int index) {
     long curProfitTotal = 0;
     long nextProfitTotal = 0;
-    int comparison = 0;
-    int fails = 0;
     for (int i = 0; i < TRIES; i++) {
       Marker offset = prices.rand(true);
       int[] data = prices.getData(offset);
       long curProfit = profit(cur, data, offset.offset());
       long nextProfit = profit(next, data, offset.offset());
-      if (nextProfit < curProfit) {
-        ++fails;
-        --comparison;
-        if (TRIES - i - 1 + comparison < FAIL_DIFF || fails > FAIL_TRIES) {
-          return cur;
-        }
-      } else if (nextProfit > curProfit) {
-        ++comparison;
-      }
       curProfitTotal += curProfit;
       nextProfitTotal += nextProfit;
+      if (nextProfit < (curProfit < 0 ? 1.5f * curProfit : .5f * curProfit)) {
+        return cur;
+      }
     }
-    if (nextProfitTotal <= curProfitTotal || comparison < FAIL_DIFF) {
+    if (nextProfitTotal < (curProfitTotal < 0 ? .9f * curProfitTotal : 1.1f * curProfitTotal)) {
       return cur;
     }
     evolutions.incrementAndGet(index);
