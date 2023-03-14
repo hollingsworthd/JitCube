@@ -19,10 +19,10 @@ public class Main {
   private static final int NETS = Integer.parseInt(System.getProperty("nets"));
   private static final int GROUPS = Integer.parseInt(System.getProperty("groups"));
   private static final long INTERVAL = 1000L * Integer.parseInt(System.getProperty("interval"));
-  private static final int TRIES = 32;
+  private static final int TRIES = 48;
   private static final int PRICE_HISTORY = 6 * 60;
   private static final int WINDOW = 30;
-  private static final Prices prices = new Prices(2 * (PRICE_HISTORY + WINDOW * 2));
+  private static final Prices prices = new Prices(PRICE_HISTORY + (2 * WINDOW));
   private static final Random rand = new SecureRandom();
   private static final AtomicReferenceArray<NeuralNet> nets = new AtomicReferenceArray<>(NETS);
   private static final AtomicLongArray evolutions = new AtomicLongArray(NETS);
@@ -211,7 +211,7 @@ public class Main {
   }
 
   private static NeuralNet initNet(int index) {
-    return NeuralNet.create(index / NETS, index, 5, 90, PRICE_HISTORY * 2);
+    return NeuralNet.create(index / NETS, index, 5, 45, PRICE_HISTORY);
   }
 
   private static NeuralNet save(NeuralNet next, int index) {
@@ -241,10 +241,10 @@ public class Main {
   private static void eval(int index) {
     NeuralNet orig = nets.get(index);
     NeuralNet next;
-    if (rand.nextInt(5_000) == 0) {
+    if (rand.nextInt(20_000) == 0) {
       next = randOther(index, false).clone(GROUP * NETS + index, true);
     } else {
-      next = orig.mergeAndMutate(randOther(index, true), 25, 50_000);
+      next = orig.mergeAndMutate(randOther(index, true), 25, 125_000);
     }
     NeuralNet best = evalScaled(orig, next, index);
     if (best != orig) {
@@ -262,11 +262,8 @@ public class Main {
       long nextProfit = profit(next, data, offset.offset());
       curProfitTotal += curProfit;
       nextProfitTotal += nextProfit;
-      if (nextProfit < (curProfit < 0 ? 1.5f * curProfit : .5f * curProfit)) {
-        return cur;
-      }
     }
-    if (nextProfitTotal < (curProfitTotal < 0 ? .9f * curProfitTotal : 1.1f * curProfitTotal)) {
+    if (nextProfitTotal < (curProfitTotal < 0 ? .95f * curProfitTotal : 1.05f * curProfitTotal)) {
       return cur;
     }
     evolutions.incrementAndGet(index);
@@ -277,8 +274,8 @@ public class Main {
     int buyTime = -1;
     int buyOffset = -1;
     double shares = 0d;
-    for (int t = WINDOW * 2; t > WINDOW; t--) {
-      int cur = (offset + t - 1) * 2;
+    for (int t = 0; t < WINDOW; t++) {
+      int cur = offset + t;
       if (Decision.BUY == net.decide(data, cur)) {
         buyTime = t;
         buyOffset = cur;
@@ -287,14 +284,14 @@ public class Main {
       }
     }
     if (buyTime > -1) {
-      for (int t = buyTime - 1; t > buyTime - 1 - WINDOW; t--) {
-        int cur = (offset + t - 1) * 2;
+      for (int t = buyTime + 1; t < buyTime + 1 + WINDOW; t++) {
+        int cur = offset + t;
         if (Decision.SELL == net.decide(data, cur)) {
-          return (int) Math.rint(shares * data[cur] - shares * data[buyOffset]);
+          return (int) Math.rint((shares * data[cur]) - (shares * data[buyOffset]));
         }
       }
       return (int) Math.rint(
-          shares * data[(offset + buyTime - WINDOW - 1) * 2] - shares * data[buyOffset]);
+          (shares * data[offset + buyTime + WINDOW]) - (shares * data[buyOffset]));
     }
     return 0;
   }

@@ -88,7 +88,7 @@ public class NeuralNet implements Serializable {
     for (int i = 0; i < layers - 1; i++) {
       weights[i] = new float[len][];
       for (int j = 0; j < len; j++) {
-        weights[i][j] = new float[i == 0 ? inputLen / 2 : (i == 1 ? len / 2 : len)];
+        weights[i][j] = new float[i == 0 ? inputLen : len];
       }
     }
     return weights;
@@ -172,53 +172,28 @@ public class NeuralNet implements Serializable {
   }
 
   private double[] processDecision(int[] input, int offset) {
-    int maxPrice = Integer.MIN_VALUE;
-    int minPrice = Integer.MAX_VALUE;
-    int maxVolume = Integer.MIN_VALUE;
-    int minVolume = Integer.MAX_VALUE;
+    int max = Integer.MIN_VALUE;
+    int min = Integer.MAX_VALUE;
 
-    for (int i = offset, max = i + weights[0][0].length; i < max; i += 2) {
-      maxPrice = Math.max(maxPrice, input[i]);
-      minPrice = Math.min(minPrice, input[i]);
-      maxVolume = Math.max(maxVolume, input[i + 1]);
-      minVolume = Math.min(minVolume, input[i + 1]);
+    for (int i = offset, size = i + weights[0][0].length; i < size; i++) {
+      max = Math.max(max, input[i]);
+      min = Math.min(min, input[i]);
     }
-    double scalePrice = maxPrice - minPrice;
-    double scaleVolume = maxVolume - minVolume;
+    double scale = max - min;
     double[] prev = buffer1;
     double[] next = buffer2;
     for (int i = 0; i < weights.length; i++) {
       for (int j = 0; j < weights[i].length; j++) {
         double sum = 0d;
         if (i == 0) {
-          if (j % 2 == 0) {
-            for (int k = 0; k < weights[i][j].length; k++) {
-              sum += (double) weights[i][j][k] * (double) (input[k * 2 + offset] - minPrice)
-                  / scalePrice;
-            }
-
-          } else {
-            for (int k = 0; k < weights[i][j].length; k++) {
-              sum += (double) weights[i][j][k] * (double) (input[k * 2 + 1 + offset] - minVolume)
-                  / scaleVolume;
-            }
-          }
-        } else if (i == 1) {
-          if (j % 2 == 0) {
-            for (int k = 0; k < weights[i][j].length; k++) {
-              sum += (double) weights[i][j][k] * prev[k * 2];
-            }
-          } else {
-            for (int k = 0; k < weights[i][j].length; k++) {
-              sum += (double) weights[i][j][k] * prev[k * 2 + 1];
-            }
+          for (int k = 0; k < weights[i][j].length; k++) {
+            sum += (double) weights[i][j][k] * (double) (input[k + offset] - min) / scale;
           }
         } else {
           for (int k = 0; k < weights[i][j].length; k++) {
             sum += (double) weights[i][j][k] * prev[k];
           }
         }
-
         next[j] = sum > 0d ? sum : 0d;
       }
       double[] tmp = prev;
@@ -244,7 +219,7 @@ public class NeuralNet implements Serializable {
     StringBuilder builder = new StringBuilder();
     builder.append(weights.length).append("/");
     builder.append(weights[0].length).append("/");
-    builder.append(weights[0][0].length * 2).append("/");
+    builder.append(weights[0][0].length).append("/");
     builder.append(generation).append("/");
     builder.append("\n");
 
