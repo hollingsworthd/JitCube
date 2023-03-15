@@ -271,27 +271,26 @@ public class Main {
   }
 
   private static int profit(NeuralNet net, int[] data, int offset) {
-    int buyTime = -1;
+    int time = -1;
     int buyOffset = -1;
     double shares = 0d;
     for (int t = 0; t < WINDOW; t++) {
-      int cur = offset + t;
-      if (Decision.BUY == net.decide(data, cur)) {
-        buyTime = t;
-        buyOffset = cur;
+      if (Decision.BUY == net.decide(data, offset + t)) {
+        time = t;
+        buyOffset = offset + t + PRICE_HISTORY - 1;
         shares = 100_000d / (float) data[buyOffset];
         break;
       }
     }
-    if (buyTime > -1) {
-      for (int t = buyTime + 1; t < buyTime + 1 + WINDOW; t++) {
-        int cur = offset + t;
-        if (Decision.SELL == net.decide(data, cur)) {
-          return (int) Math.rint((shares * data[cur]) - (shares * data[buyOffset]));
+    if (time > -1) {
+      for (int t = time + 1; t < time + 1 + WINDOW; t++) {
+        if (Decision.SELL == net.decide(data, offset + t)) {
+          return (int) Math.rint(
+              (shares * data[offset + t + PRICE_HISTORY - 1]) - (shares * data[buyOffset]));
         }
       }
       return (int) Math.rint(
-          (shares * data[offset + buyTime + WINDOW]) - (shares * data[buyOffset]));
+          (shares * data[offset + time + WINDOW + PRICE_HISTORY - 1]) - (shares * data[buyOffset]));
     }
     return 0;
   }

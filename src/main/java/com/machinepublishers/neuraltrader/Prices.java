@@ -141,7 +141,7 @@ public class Prices {
     int[][] data = training ? this.training : this.alt;
     int[] odds = training ? this.oddsTraining : this.oddsAlt;
     int dataset = odds[rand.nextInt(odds.length)];
-    int offset = rand.nextInt(data[dataset].length - bufferLen);
+    int offset = rand.nextInt(data[dataset].length - bufferLen - 1);
     return new Marker(training, dataset, offset);
   }
 
