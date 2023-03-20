@@ -20,7 +20,7 @@ public class Main {
   private static final int GROUPS = Integer.parseInt(System.getProperty("groups"));
   private static final long INTERVAL = 1000L * Integer.parseInt(System.getProperty("interval"));
   private static final boolean LOCK = Boolean.parseBoolean(System.getProperty("lock"));
-  private static final int TRIES = 48;
+  private static final int TRIES = 32;
   private static final int PRICE_HISTORY = 6 * 60;
   private static final int WINDOW = 30;
   private static final Prices prices = new Prices(PRICE_HISTORY + (2 * WINDOW));
@@ -273,7 +273,7 @@ public class Main {
       curProfitTotal += curProfit;
       nextProfitTotal += nextProfit;
     }
-    if (nextProfitTotal < (curProfitTotal < 0 ? .98f * curProfitTotal : 1.02f * curProfitTotal)) {
+    if (nextProfitTotal < (curProfitTotal < 0 ? .99f * curProfitTotal : 1.01f * curProfitTotal)) {
       return cur;
     }
     evolutions.incrementAndGet(index);
