@@ -263,7 +263,7 @@ public class Main {
       curProfitTotal += curProfit;
       nextProfitTotal += nextProfit;
     }
-    if (nextProfitTotal < (curProfitTotal < 0 ? .95f * curProfitTotal : 1.05f * curProfitTotal)) {
+    if (nextProfitTotal < (curProfitTotal < 0 ? .97f * curProfitTotal : 1.03f * curProfitTotal)) {
       return cur;
     }
     evolutions.incrementAndGet(index);
