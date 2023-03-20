@@ -19,6 +19,7 @@ public class Main {
   private static final int NETS = Integer.parseInt(System.getProperty("nets"));
   private static final int GROUPS = Integer.parseInt(System.getProperty("groups"));
   private static final long INTERVAL = 1000L * Integer.parseInt(System.getProperty("interval"));
+  private static final boolean LOCK = Boolean.parseBoolean(System.getProperty("lock"));
   private static final int TRIES = 48;
   private static final int PRICE_HISTORY = 6 * 60;
   private static final int WINDOW = 30;
@@ -72,11 +73,15 @@ public class Main {
       Log.info("\nSaved.");
     }));
 
-    for (int n = 0; n < NETS; n++) {
-      startEval(nets.get(n), n);
+    if (!LOCK) {
+      for (int n = 0; n < NETS; n++) {
+        startEval(nets.get(n), n);
+      }
     }
     startTestLogs();
-    startAutoSave();
+    if (!LOCK) {
+      startAutoSave();
+    }
   }
 
   private static Server startServer() throws RemoteException {
@@ -114,6 +119,8 @@ public class Main {
       final int allTime = 4383;
       int[] profitHistory = new int[allTime];
       int[][] profitHistoryDetail = new int[NETS][allTime];
+      long totalAll = 0;
+      long[] totalDetail = new long[NETS];
       Marker marker;
       for (long x = 0; x < Long.MAX_VALUE; x++) {
         try {
@@ -133,11 +140,13 @@ public class Main {
         int[] data = prices.getData(marker);
         int totalProfit = 0;
         int cur = (int) (x % profitHistory.length);
-        Log.info("=======================================================");
+        Log.info("=================================================================");
         for (int n = 0; n < NETS; n++) {
           NeuralNet net = nets.get(n);
           int profit = profit(net, data, marker.offset());
           totalProfit += profit;
+          totalDetail[n] += profit;
+          totalAll += profit;
           profitHistoryDetail[n][cur] = profit;
           int detailTotal = 0;
           int detailTotalRecent = 0;
@@ -160,8 +169,9 @@ public class Main {
             evolutions.set(n, 0);
             evolution = 0;
           }
-          Log.info(">N%02d %06d: %.2f (%.2f) (%.2f) (%.2f)", GROUP * NETS + n, evolution,
-              profit / 100d, detailTotal / 100d, detailTotalRecent / 100d, detailTotalDay / 100d);
+          Log.info(">N%02d %06d: %.2f (%.2f) (%.2f) (%.2f) (%.2f)", GROUP * NETS + n, evolution,
+              profit / 100d, totalDetail[n] / 100d, detailTotal / 100d, detailTotalRecent / 100d,
+              detailTotalDay / 100d);
         }
         profitHistory[cur] = totalProfit;
         int profit = 0;
@@ -180,10 +190,10 @@ public class Main {
           index = index < 0 ? index + allTime : index;
           profitDay += profitHistory[index];
         }
-        Log.info("=======================================================");
-        Log.info("===== (%.2f) (%.2f) (%.2f)", profit / 100d, profitRecent / 100d,
-            profitDay / 100d);
-        Log.info("=======================================================");
+        Log.info("=================================================================");
+        Log.info("===== (%.2f) (%.2f) (%.2f) (%.2f)", totalAll / 100d, profit / 100d,
+            profitRecent / 100d, profitDay / 100d);
+        Log.info("=================================================================");
       }
     }).start();
   }
@@ -263,7 +273,7 @@ public class Main {
       curProfitTotal += curProfit;
       nextProfitTotal += nextProfit;
     }
-    if (nextProfitTotal < (curProfitTotal < 0 ? .99f * curProfitTotal : 1.01f * curProfitTotal)) {
+    if (nextProfitTotal < (curProfitTotal < 0 ? .98f * curProfitTotal : 1.02f * curProfitTotal)) {
       return cur;
     }
     evolutions.incrementAndGet(index);
