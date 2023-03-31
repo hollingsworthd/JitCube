@@ -19,7 +19,6 @@ public class Main {
   private static final int NETS = Integer.parseInt(System.getProperty("nets"));
   private static final int GROUPS = Integer.parseInt(System.getProperty("groups"));
   private static final long INTERVAL = 1000L * Integer.parseInt(System.getProperty("interval"));
-  private static final boolean LOCK = Boolean.parseBoolean(System.getProperty("lock"));
   private static final int TRIES = 24;
   private static final int PRICE_HISTORY = 6 * 60;
   private static final int WINDOW = 30;
@@ -73,13 +72,13 @@ public class Main {
       Log.info("\nSaved.");
     }));
 
-    if (!LOCK) {
+    if (GROUP != 0) {
       for (int n = 0; n < NETS; n++) {
         startEval(nets.get(n), n);
       }
     }
     startTestLogs();
-    if (!LOCK) {
+    if (GROUP != 0) {
       startAutoSave();
     }
   }
@@ -236,8 +235,14 @@ public class Main {
       return nets.get(randItem);
     }
     int randItem = rand.nextInt(NETS);
-    int randGroup = rand.nextInt(GROUPS - 1);
-    randGroup += randGroup < GROUP ? 0 : 1;
+    int randGroup = 0;
+    for (int x = 0; x < 4; x++) {
+      randGroup = rand.nextInt(GROUPS - 1);
+      randGroup += randGroup < GROUP ? 0 : 1;
+      if (randGroup != 0) {
+        break;
+      }
+    }
     if (server != null) {
       try {
         return server.download(getKey(), randGroup * NETS + randItem, GROUP * NETS + index);
@@ -251,7 +256,7 @@ public class Main {
   private static void eval(int index) {
     NeuralNet orig = nets.get(index);
     NeuralNet next;
-    if (rand.nextInt(20_000) == 0) {
+    if (rand.nextInt(1_000) == 0) {
       next = randOther(index, false).clone(GROUP * NETS + index, true);
     } else {
       next = orig.mergeAndMutate(randOther(index, true), 25, 125_000);
@@ -268,10 +273,8 @@ public class Main {
     for (int i = 0; i < TRIES; i++) {
       Marker offset = prices.rand(true);
       int[] data = prices.getData(offset);
-      long curProfit = profit(cur, data, offset.offset());
-      long nextProfit = profit(next, data, offset.offset());
-      curProfitTotal += curProfit;
-      nextProfitTotal += nextProfit;
+      curProfitTotal += profit(cur, data, offset.offset());
+      nextProfitTotal += profit(next, data, offset.offset());
     }
     if (nextProfitTotal <= curProfitTotal) {
       return cur;

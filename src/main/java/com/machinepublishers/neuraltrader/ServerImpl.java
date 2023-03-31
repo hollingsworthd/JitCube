@@ -2,11 +2,14 @@ package com.machinepublishers.neuraltrader;
 
 import com.machinepublishers.neuraltrader.Prices.Marker;
 import java.rmi.RemoteException;
+import java.security.SecureRandom;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 
 public class ServerImpl implements Server {
 
+  private static final Random rand = new SecureRandom();
   private final Prices prices;
   private final Map<Long, Marker> markers = new HashMap<>();
   private Marker marker1 = null;

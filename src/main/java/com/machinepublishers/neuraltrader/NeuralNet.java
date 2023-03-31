@@ -119,6 +119,7 @@ public class NeuralNet implements Serializable {
   }
 
   private static float[][][] mutate(float[][][] weights, boolean init, int mutationsPerMillion) {
+    double max = rand.nextInt(1000) == 0 ? .3d : .1d;
     if (mutationsPerMillion > 0) {
       for (int i = 0; i < weights.length; i++) {
         for (int j = 0; j < weights[i].length; j++) {
@@ -128,7 +129,7 @@ public class NeuralNet implements Serializable {
               if (init) {
                 newVal = (rand.nextBoolean() ? 1d : -1d) * rand.nextDouble();
               } else {
-                newVal = rand.nextDouble(.001d, .1d);
+                newVal = rand.nextDouble(.01d, max);
                 newVal *= newVal;
                 double weight = weights[i][j][k];
                 double sign = (weight == 1d ? -1d
@@ -137,7 +138,7 @@ public class NeuralNet implements Serializable {
               }
               newVal = newVal > 1d ? 1d : newVal;
               newVal = newVal < -1d ? -1d : newVal;
-              newVal = Math.abs(newVal) < .000001d ? 0d : newVal;
+              newVal = Math.abs(newVal) < .0001d ? 0d : newVal;
               weights[i][j][k] = (float) newVal;
             }
           }
