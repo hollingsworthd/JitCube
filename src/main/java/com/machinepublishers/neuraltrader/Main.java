@@ -18,8 +18,8 @@ public class Main {
   private static final int GROUP = Integer.parseInt(System.getProperty("group"));
   private static final int NETS = Integer.parseInt(System.getProperty("nets"));
   private static final int GROUPS = Integer.parseInt(System.getProperty("groups"));
-  private static final long INTERVAL = 1000L * Integer.parseInt(System.getProperty("interval"));
-  private static final int TRIES = 24;
+  private static final long INTERVAL = Integer.parseInt(System.getProperty("interval"));
+  private static final int TRIES = 48;
   private static final int PRICE_HISTORY = 6 * 60;
   private static final int WINDOW = 30;
   private static final Prices prices = new Prices(PRICE_HISTORY + (2 * WINDOW));
@@ -27,6 +27,7 @@ public class Main {
   private static final AtomicReferenceArray<NeuralNet> nets = new AtomicReferenceArray<>(NETS);
   private static final AtomicLongArray evolutions = new AtomicLongArray(NETS);
   private static final Server server;
+  private static final NeuralNet[] baselines;
 
   static {
     System.setProperty("java.rmi.server.hostname", SERVER);
@@ -45,6 +46,15 @@ public class Main {
       serverTmp = null;
     }
     server = serverTmp;
+
+    try {
+      baselines = new NeuralNet[NETS];
+      for (int n = 0; n < NETS; n++) {
+        baselines[n] = server.download(getKey(), n, n);
+      }
+    } catch (RemoteException e) {
+      throw new IllegalStateException(e);
+    }
   }
 
   public static void main(String[] args) {
@@ -122,24 +132,29 @@ public class Main {
       long[] totalDetail = new long[NETS];
       Marker marker;
       for (long x = 0; x < Long.MAX_VALUE; x++) {
-        try {
-          long now = System.currentTimeMillis();
-          long sleep = INTERVAL - (now % INTERVAL);
+        if (INTERVAL > 0) {
           try {
-            marker = server.randPriceMarker(getKey(), false, sleep + now);
-          } catch (RemoteException e) {
-            e.printStackTrace();
-            marker = prices.rand(false);
+            long now = System.currentTimeMillis();
+            long sleep = INTERVAL - (now % INTERVAL);
+            try {
+              marker = server.randPriceMarker(getKey(), false, sleep + now);
+            } catch (RemoteException e) {
+              e.printStackTrace();
+              marker = prices.rand(false);
+            }
+            Thread.sleep(INTERVAL - (now % INTERVAL));
+          } catch (InterruptedException e) {
+            throw new RuntimeException(e);
           }
-          Thread.sleep(INTERVAL - (now % INTERVAL));
-        } catch (InterruptedException e) {
-          throw new RuntimeException(e);
+        } else {
+          marker = prices.rand(false);
         }
 
         int[] data = prices.getData(marker);
         int totalProfit = 0;
         int cur = (int) (x % profitHistory.length);
-        Log.info("=================================================================");
+        StringBuilder builder = new StringBuilder();
+        builder.append("=================================================================\n");
         for (int n = 0; n < NETS; n++) {
           NeuralNet net = nets.get(n);
           int profit = profit(net, data, marker.offset());
@@ -168,9 +183,13 @@ public class Main {
             evolutions.set(n, 0);
             evolution = 0;
           }
-          Log.info(">N%02d %06d: %.2f (%.2f) (%.2f) (%.2f) (%.2f)", GROUP * NETS + n, evolution,
-              profit / 100d, totalDetail[n] / 100d, detailTotal / 100d, detailTotalRecent / 100d,
-              detailTotalDay / 100d);
+          if (GROUP == 0) {
+            evolutions.incrementAndGet(n);
+          }
+          builder.append(
+              String.format(">N%02d %06d: %.2f (%.2f) (%.2f) (%.2f) (%.2f)\n", GROUP * NETS + n,
+                  evolution, profit / 100d, totalDetail[n] / 100d, detailTotal / 100d,
+                  detailTotalRecent / 100d, detailTotalDay / 100d));
         }
         profitHistory[cur] = totalProfit;
         int profit = 0;
@@ -189,10 +208,14 @@ public class Main {
           index = index < 0 ? index + allTime : index;
           profitDay += profitHistory[index];
         }
-        Log.info("=================================================================");
-        Log.info("===== (%.2f) (%.2f) (%.2f) (%.2f)", totalAll / 100d, profit / 100d,
-            profitRecent / 100d, profitDay / 100d);
-        Log.info("=================================================================");
+        builder.append("=================================================================\n");
+        builder.append(
+            String.format("===== (%.2f) (%.2f) (%.2f) (%.2f)\n", totalAll / 100d, profit / 100d,
+                profitRecent / 100d, profitDay / 100d));
+        builder.append("=================================================================\n");
+        if (INTERVAL > 0 || x % 100 == 0) {
+          System.out.print(builder);
+        }
       }
     }).start();
   }
@@ -236,7 +259,7 @@ public class Main {
     }
     int randItem = rand.nextInt(NETS);
     int randGroup = 0;
-    for (int x = 0; x < 4; x++) {
+    for (int x = 0; x < 3; x++) {
       randGroup = rand.nextInt(GROUPS - 1);
       randGroup += randGroup < GROUP ? 0 : 1;
       if (randGroup != 0) {
@@ -256,7 +279,7 @@ public class Main {
   private static void eval(int index) {
     NeuralNet orig = nets.get(index);
     NeuralNet next;
-    if (rand.nextInt(1_000) == 0) {
+    if (rand.nextInt(10_000) == 0) {
       next = randOther(index, false).clone(GROUP * NETS + index, true);
     } else {
       next = orig.mergeAndMutate(randOther(index, true), 25, 125_000);
@@ -268,15 +291,20 @@ public class Main {
   }
 
   private static NeuralNet evalScaled(NeuralNet cur, NeuralNet next, int index) {
+    long baselineProfitTotal = 0;
     long curProfitTotal = 0;
     long nextProfitTotal = 0;
+    NeuralNet baseline = baselines[rand.nextInt(baselines.length)];
     for (int i = 0; i < TRIES; i++) {
       Marker offset = prices.rand(true);
       int[] data = prices.getData(offset);
+      baselineProfitTotal += profit(baseline, data, offset.offset());
       curProfitTotal += profit(cur, data, offset.offset());
       nextProfitTotal += profit(next, data, offset.offset());
     }
-    if (nextProfitTotal <= curProfitTotal) {
+    long otherProfitTotal = Math.max(baselineProfitTotal, curProfitTotal);
+    if (nextProfitTotal < (otherProfitTotal < 0 ? .98f * otherProfitTotal
+        : 1.02f * otherProfitTotal)) {
       return cur;
     }
     evolutions.incrementAndGet(index);
