@@ -39,6 +39,7 @@ public class LockedFile {
         while (byteBuffer.hasRemaining()) {
           channel.write(byteBuffer);
         }
+        file.setLength(byteBuffer.position());
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
