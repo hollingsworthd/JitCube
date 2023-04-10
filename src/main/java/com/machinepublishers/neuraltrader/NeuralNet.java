@@ -153,6 +153,10 @@ public class NeuralNet implements Serializable {
         new File(DATA, "n" + newId), weights);
   }
 
+  public boolean isComparable(NeuralNet other) {
+    return generation == other.generation;
+  }
+
   public NeuralNet mergeAndMutate(NeuralNet other, int mergesPercent, int mutationsPerMillion) {
     if (generation == other.generation) {
       return new NeuralNet(generation, id, file,
@@ -202,17 +206,6 @@ public class NeuralNet implements Serializable {
       next = tmp;
     }
     return prev;
-  }
-
-  @Override
-  public boolean equals(Object obj) {
-    return obj == this || (obj instanceof NeuralNet other && Arrays.deepEquals(weights,
-        other.weights));
-  }
-
-  @Override
-  public int hashCode() {
-    return Arrays.deepHashCode(new Object[]{weights});
   }
 
   @Override

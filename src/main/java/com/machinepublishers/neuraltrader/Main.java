@@ -280,19 +280,17 @@ public class Main {
     NeuralNet orig = nets.get(index);
     NeuralNet best;
     if (rand.nextInt(5_000) == 0) {
-      best = evalScaled(index, false, orig,
-          randOther(index, false).clone(GROUP * NETS + index, true));
+      best = evalScaled(index, orig, randOther(index, false).clone(GROUP * NETS + index, true));
     } else {
-      best = evalScaled(index, true, orig,
-          orig.mergeAndMutate(randOther(index, true), 25, 125_000));
+      best = evalScaled(index, orig, orig.mergeAndMutate(randOther(index, true), 25, 125_000));
     }
     if (best != orig) {
       save(best, index);
     }
   }
 
-  private static NeuralNet evalScaled(int index, boolean compareBaseline, NeuralNet cur,
-      NeuralNet next) {
+  private static NeuralNet evalScaled(int index, NeuralNet cur, NeuralNet next) {
+    boolean compareBaseline = cur.isComparable(next);
     NeuralNet baseline = baselines[rand.nextInt(NETS)];
     long baselineProfit = 0;
     long curProfit = 0;
