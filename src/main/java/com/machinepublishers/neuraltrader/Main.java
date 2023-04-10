@@ -7,7 +7,6 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.security.SecureRandom;
-import java.util.Arrays;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicLongArray;
 import java.util.concurrent.atomic.AtomicReferenceArray;
@@ -27,7 +26,6 @@ public class Main {
   private static final Random rand = new SecureRandom();
   private static final AtomicReferenceArray<NeuralNet> nets = new AtomicReferenceArray<>(NETS);
   private static final AtomicLongArray evolutions = new AtomicLongArray(NETS);
-  private static final long[] baselineProfits = new long[NETS];
   private static final NeuralNet[] baselines;
   private static final Server server;
 
@@ -280,37 +278,37 @@ public class Main {
 
   private static void eval(int index) {
     NeuralNet orig = nets.get(index);
-    NeuralNet next;
+    NeuralNet best;
     if (rand.nextInt(5_000) == 0) {
-      next = randOther(index, false).clone(GROUP * NETS + index, true);
+      best = evalScaled(index, false, orig,
+          randOther(index, false).clone(GROUP * NETS + index, true));
     } else {
-      next = orig.mergeAndMutate(randOther(index, true), 25, 125_000);
+      best = evalScaled(index, true, orig,
+          orig.mergeAndMutate(randOther(index, true), 25, 125_000));
     }
-    NeuralNet best = evalScaled(orig, next, index);
     if (best != orig) {
       save(best, index);
     }
   }
 
-  private static NeuralNet evalScaled(NeuralNet cur, NeuralNet next, int index) {
-    Arrays.fill(baselineProfits, 0L);
-    long baselineProfit = -Long.MAX_VALUE;
+  private static NeuralNet evalScaled(int index, boolean compareBaseline, NeuralNet cur,
+      NeuralNet next) {
+    NeuralNet baseline = baselines[rand.nextInt(NETS)];
+    long baselineProfit = 0;
     long curProfit = 0;
     long nextProfit = 0;
-    for (int i = 0; i < TRIES; i++) {
+    int tries = compareBaseline ? TRIES : TRIES * 2;
+    for (int i = 0; i < tries; i++) {
       Marker offset = prices.rand(true);
       int[] data = prices.getData(offset);
-      for (int n = 0; n < NETS; n++) {
-        baselineProfits[n] += profit(baselines[n], data, offset.offset());
-        if (i == TRIES - 1 && baselineProfits[n] > baselineProfit) {
-          baselineProfit = baselineProfits[n];
-        }
+      if (compareBaseline) {
+        baselineProfit += profit(baseline, data, offset.offset());
       }
       curProfit += profit(cur, data, offset.offset());
       nextProfit += profit(next, data, offset.offset());
     }
-    long otherProfitTotal = Math.max(baselineProfit, curProfit);
-    if (nextProfit < (otherProfitTotal < 0 ? .98f * otherProfitTotal : 1.02f * otherProfitTotal)) {
+    long otherProfit = compareBaseline ? Math.max(baselineProfit, curProfit) : curProfit;
+    if (nextProfit < (otherProfit < 0 ? .98f * otherProfit : 1.02f * otherProfit)) {
       return cur;
     }
     evolutions.incrementAndGet(index);
