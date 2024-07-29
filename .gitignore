@@ -1,5 +1,7 @@
-prices/
-prices-misc/
+prices/alt/
+prices/alt-dist/
+prices/training/
+prices/training-dist/
 Thumbs.db
 .DS_Store
 .gradle
@@ -11,6 +13,7 @@ out/
 *.iml
 *.ipr
 *.iws
+notes-local
 .project
 .settings
 .classpath
